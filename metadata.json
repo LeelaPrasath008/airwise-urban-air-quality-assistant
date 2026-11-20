@@ -1,0 +1,6 @@
+{
+  "name": "AIRWISE",
+  "description": "Breathe Smarter. Live Greener. GenAI-powered urban air quality assistant helping families navigate winter smog with personalized routines, indoor air optimization, sustainable choices, and transparent impact tracking.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

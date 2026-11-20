@@ -1,0 +1,361 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { axe } from 'vitest-axe';
+import App from '../../src/App.tsx';
+import type { AirQualitySnapshot, DailyRoutinePlan } from '../../src/shared/types.ts';
+
+const MOCK_SNAPSHOT: AirQualitySnapshot = {
+  location: {
+    id: 'in-new-delhi',
+    name: 'New Delhi',
+    region: 'Delhi',
+    country: 'India',
+    countryCode: 'IN',
+    latitude: 28.61,
+    longitude: 77.21,
+  },
+  standard: 'INDIA_CPCB',
+  aqi: 268,
+  dominantPollutant: 'PM2.5',
+  category: {
+    key: 'poor',
+    label: 'Poor',
+    rangeLabel: '201–300',
+    severityLevel: 4,
+    textColorClass: 'text-[#9A3412]',
+    bgTintClass: 'bg-[#FFF7ED]',
+    borderTintClass: 'border-[#FDBA74]',
+    barColorHex: '#EA580C',
+    healthSummary: 'Breathing discomfort likely on prolonged exposure.',
+    outdoorGuidance: 'Shift exercise indoors.',
+    ventilationAdvice: 'Keep windows mostly closed.',
+  },
+  pollutants: {
+    pm25: 112.4,
+    pm10: 218.0,
+    no2: 52.1,
+    o3: 34.0,
+    so2: 14.5,
+    co: 1120,
+  },
+  weather: {
+    temperatureC: 15.2,
+    humidityPercent: 72,
+    windSpeedKmh: 5.4,
+    weatherCode: 45,
+    conditionLabel: 'Fog / Winter haze',
+  },
+  hourlyTrend: [
+    { timeIso: '2026-11-20T08:00', hourLabel: '08:00', pm25: 120, pm10: 225, aqi: 295, isForecast: false },
+    { timeIso: '2026-11-20T14:00', hourLabel: '14:00', pm25: 86, pm10: 165, aqi: 187, isForecast: true },
+  ],
+  lastUpdatedIso: '2026-11-20T10:00:00.000Z',
+  dataSource: 'Open-Meteo Air Quality (CAMS/ECMWF) & Weather API',
+  isLive: true,
+  isDemonstrationData: false,
+  cacheHit: false,
+  disclaimer: 'AQI computed using Indian National AQI (CPCB) breakpoints.',
+};
+
+const MOCK_ROUTINE: DailyRoutinePlan = {
+  generatedAtIso: '2026-11-20T10:05:00.000Z',
+  locationName: 'Bengaluru, India',
+  aqiAtGeneration: 74,
+  standard: 'INDIA_CPCB',
+  source: 'gemini_ai',
+  summary: 'Personalized Satisfactory AQI routine for Bengaluru.',
+  morning: [
+    {
+      id: 'm1',
+      title: 'Seal windows during morning smog',
+      whatToDo: 'Keep exterior windows closed during rush hour.',
+      whyRecommended: 'Outdoor PM2.5 is elevated.',
+      howToImplement: 'Check door seals and run HEPA filtration.',
+      environmentalBenefit: 'Retains winter indoor heat.',
+      healthConsideration: 'Lowers indoor PM2.5 exposure.',
+      effortOrCost: 'Zero cost',
+      impactCategory: 'clean_indoor_air',
+    },
+  ],
+  afternoon: [
+    {
+      id: 'a1',
+      title: 'Use metro for office commute',
+      whatToDo: 'Take enclosed metro rail instead of solo driving.',
+      whyRecommended: 'Cuts tailpipe emissions and exposure.',
+      howToImplement: 'Use transit card.',
+      environmentalBenefit: 'Estimated 65-80% lower commute CO2e.',
+      healthConsideration: 'Reduces roadside exhaust inhalation.',
+      effortOrCost: 'Lower than fuel + parking',
+      impactCategory: 'public_transit',
+    },
+  ],
+  evening: [
+    {
+      id: 'e1',
+      title: 'Run kitchen exhaust while cooking',
+      whatToDo: 'Switch on chimney before stove ignition.',
+      whyRecommended: 'Prevents indoor cooking PM2.5 spikes.',
+      howToImplement: 'Run 10 minutes post-cooking.',
+      environmentalBenefit: 'Use lids to save gas.',
+      healthConsideration: 'Protects sleeping family members.',
+      effortOrCost: 'Zero cost',
+      impactCategory: 'clean_indoor_air',
+    },
+  ],
+  disclaimer: 'Not medical advice.',
+};
+
+function setupMockFetch() {
+  return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+
+    if (url.includes('/api/locations/presets')) {
+      return new Response(
+        JSON.stringify({
+          locations: [
+            MOCK_SNAPSHOT.location,
+            {
+              id: 'in-bengaluru',
+              name: 'Bengaluru',
+              region: 'Karnataka',
+              country: 'India',
+              countryCode: 'IN',
+              latitude: 12.97,
+              longitude: 77.59,
+            },
+          ],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (url.includes('/api/air-quality')) {
+      const isBlr = url.includes('Bengaluru');
+      const isUsEpa = url.includes('standard=US_EPA');
+      const isRefresh = url.includes('refresh=true');
+      const base: AirQualitySnapshot = isBlr
+        ? {
+            ...MOCK_SNAPSHOT,
+            location: {
+              id: 'in-bengaluru',
+              name: 'Bengaluru',
+              region: 'Karnataka',
+              country: 'India',
+              countryCode: 'IN',
+              latitude: 12.97,
+              longitude: 77.59,
+            },
+            aqi: 74,
+            category: { ...MOCK_SNAPSHOT.category, key: 'satisfactory', label: 'Satisfactory', severityLevel: 2 },
+          }
+        : MOCK_SNAPSHOT;
+
+      const payload: AirQualitySnapshot = {
+        ...base,
+        standard: isUsEpa ? 'US_EPA' : 'INDIA_CPCB',
+        aqi: isUsEpa ? 185 : base.aqi,
+        cacheHit: !isRefresh && !isBlr && !isUsEpa,
+      };
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url.includes('/api/routine')) {
+      return new Response(JSON.stringify(MOCK_ROUTINE), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url.includes('/api/ai/chat')) {
+      return new Response(
+        JSON.stringify({
+          reply: 'With current air quality conditions, move strenuous exercise indoors today.',
+          source: 'gemini_ai',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
+  });
+}
+
+describe('AIRWISE Frontend, E2E User Journey & WCAG 2.2 AA Accessibility', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('executes complete user journey across all 7 modules including standard switch, refresh, indoor air, alternatives, community, and impact CRUD', async () => {
+    const fetchSpy = setupMockFetch();
+    const user = userEvent.setup();
+    render(<App />);
+
+    // 1. Onboarding + Live AQI dashboard render (including SO2 and CO rows + cached indicator)
+    expect(await screen.findByText('268')).toBeInTheDocument();
+    expect(screen.getByText(/New Delhi, Delhi/i)).toBeInTheDocument();
+    expect(screen.getByText(/Poor Air Quality Notice/i)).toBeInTheDocument();
+    expect(screen.getByText(/Sulphur Dioxide/i)).toBeInTheDocument();
+    expect(screen.getByText(/1\.12 mg\/m³/i)).toBeInTheDocument();
+
+    // Toggle AQI Standard (CPCB -> US EPA) and click Refresh (verifies refresh=true query)
+    await user.click(screen.getByRole('button', { name: /^US EPA AQI$/i }));
+    expect(await screen.findByText('185')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Refresh air quality readings/i }));
+    await waitFor(() => {
+      expect(
+        fetchSpy.mock.calls.some(([arg]) => String(arg).includes('refresh=true'))
+      ).toBe(true);
+    });
+
+    // 2. Switch location via Location Selector modal
+    await user.click(
+      screen.getByRole('button', { name: /Change monitoring location, currently New Delhi/i })
+    );
+    const dialog = await screen.findByRole('dialog', { name: /Select monitoring location/i });
+    expect(dialog).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Bengaluru/i }));
+    expect(await screen.findByText('74')).toBeInTheDocument();
+
+    // 3. Daily Planner: generate personalized routine
+    await user.click(screen.getByRole('button', { name: /^Daily Planner$/i }));
+    const generateBtn = await screen.findByRole('button', { name: /Generate daily routine/i });
+    await user.click(generateBtn);
+    expect(await screen.findByText(/Seal windows during morning smog/i)).toBeInTheDocument();
+
+    // 4. Indoor Air Optimizer: verify CADR and safety warnings
+    await user.click(screen.getByRole('button', { name: /^Indoor Air$/i }));
+    expect(await screen.findByText(/Indoor Air Quality Optimizer/i)).toBeInTheDocument();
+    expect(screen.getByText(/Methods to avoid/i)).toBeInTheDocument();
+
+    // 5. Sustainable Choices: search & log an alternative
+    await user.click(screen.getByRole('button', { name: /^Sustainable Choices$/i }));
+    expect(await screen.findByText(/Sustainable Alternatives Finder/i)).toBeInTheDocument();
+    const logButtons = screen.getAllByRole('button', { name: /Adopt & log action/i });
+    await user.click(logButtons[0]);
+
+    // 6. Ask AIRWISE AI a question
+    await user.click(screen.getByRole('button', { name: /^AI Assistant$/i }));
+    const starterBtn = await screen.findByRole('button', {
+      name: /Is it a good idea to exercise outdoors today\?/i,
+    });
+    await user.click(starterBtn);
+    expect(
+      await screen.findByText(/move strenuous exercise indoors today/i)
+    ).toBeInTheDocument();
+
+    // 7. Community Impact Center: join a pledge
+    await user.click(screen.getByRole('button', { name: /^Community$/i }));
+    expect(await screen.findByText(/Community Impact Center/i)).toBeInTheDocument();
+    const joinButtons = screen.getAllByRole('button', { name: /^Join pledge$/i });
+    await user.click(joinButtons[0]);
+    expect(screen.getByRole('button', { name: /Pledged/i })).toBeInTheDocument();
+
+    // 8. Personal Impact Tracker: log custom action and delete it
+    await user.click(screen.getByRole('button', { name: /^My Impact$/i }));
+    const titleInput = await screen.findByLabelText(/Description/i);
+    await user.type(titleInput, 'Took metro to office');
+    await user.click(screen.getByRole('button', { name: /Log sustainable action/i }));
+    expect(await screen.findByText('Took metro to office')).toBeInTheDocument();
+
+    // Delete the newly logged custom action
+    await user.click(
+      screen.getByRole('button', { name: /Remove logged action Took metro to office/i })
+    );
+    await waitFor(() => {
+      expect(screen.queryByText('Took metro to office')).not.toBeInTheDocument();
+    });
+  }, 20000);
+
+  it('enforces WCAG modal focus trapping and restores focus to trigger on Escape', async () => {
+    setupMockFetch();
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText('268');
+
+    const alertTrigger = screen.getByRole('button', { name: /Open smart alert preferences/i });
+    alertTrigger.focus();
+    await user.click(alertTrigger);
+
+    const dialog = await screen.findByRole('dialog', { name: /Smart alert preferences/i });
+    expect(dialog).toBeInTheDocument();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+
+    // Tabbing repeatedly stays trapped inside the modal dialog
+    for (let i = 0; i < 8; i++) {
+      await user.tab();
+      expect(dialog.contains(document.activeElement)).toBe(true);
+    }
+
+    // Escape closes dialog and restores focus to triggering button
+    await user.keyboard('{Escape}');
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: /Smart alert preferences/i })).not.toBeInTheDocument();
+    });
+    expect(document.activeElement).toBe(alertTrigger);
+  });
+
+  it('renders accessible error state and supports mobile navigation drawer', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Service unreachable'));
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Unable to load air quality data/i);
+
+    // Open and close mobile navigation drawer
+    const openMenuBtn = screen.getByRole('button', { name: /Open navigation menu/i });
+    await user.click(openMenuBtn);
+    expect(screen.getByRole('dialog', { name: /Mobile navigation/i })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Close navigation menu/i }));
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: /Mobile navigation/i })).not.toBeInTheDocument();
+    });
+  });
+
+  it('passes automated axe-core WCAG 2.2 AA accessibility audit across all 7 modules and open modals with zero violations', async () => {
+    setupMockFetch();
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+
+    await screen.findByText('268');
+    expect((await axe(container)).violations).toEqual([]);
+
+    // Audit open Location Selector modal
+    await user.click(
+      screen.getByRole('button', { name: /Change monitoring location, currently New Delhi/i })
+    );
+    await screen.findByRole('dialog', { name: /Select monitoring location/i });
+    expect((await axe(container)).violations).toEqual([]);
+    await user.keyboard('{Escape}');
+
+    // Audit open Alert Preferences modal
+    await user.click(screen.getByRole('button', { name: /Open smart alert preferences/i }));
+    await screen.findByRole('dialog', { name: /Smart alert preferences/i });
+    expect((await axe(container)).violations).toEqual([]);
+    await user.keyboard('{Escape}');
+
+    const modules: Array<{ nav: RegExp; heading: RegExp }> = [
+      { nav: /^Daily Planner$/i, heading: /AI Personalized Daily Routine Planner/i },
+      { nav: /^Indoor Air$/i, heading: /Indoor Air Quality Optimizer/i },
+      { nav: /^Sustainable Choices$/i, heading: /Sustainable Alternatives Finder/i },
+      { nav: /^AI Assistant$/i, heading: /AIRWISE AI Assistant/i },
+      { nav: /^Community$/i, heading: /Community Impact Center/i },
+      { nav: /^My Impact$/i, heading: /Personal Environmental Impact Tracker/i },
+    ];
+
+    for (const mod of modules) {
+      await user.click(screen.getByRole('button', { name: mod.nav }));
+      await screen.findByText(mod.heading);
+      expect((await axe(container)).violations).toEqual([]);
+    }
+  }, 45000);
+});
+

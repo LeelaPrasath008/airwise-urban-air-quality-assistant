@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-forest-950: #0B261D;
+  --color-forest-900: #11382B;
+  --color-forest-800: #174C3A;
+  --color-forest-700: #1F654D;
+  --color-mint-600: #1F7A5C;
+  --color-mint-500: #2A9672;
+  --color-mint-100: #E6F4EE;
+  --color-mint-50: #F2FAF6;
+
+  --color-canvas: #F6F8F7;
+  --color-surface: #FFFFFF;
+  --color-border-subtle: #E2E8E5;
+  --color-ink-900: #111C18;
+  --color-ink-600: #4A5B54;
+  --color-ink-500: #5E7068;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    color: var(--color-ink-900);
+    background-color: var(--color-canvas);
+    scroll-behavior: smooth;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    text-wrap: balance;
+  }
+
+  /* High-visibility WCAG 2.2 AA focus rings */
+  :focus-visible {
+    outline: 2px solid #11382B;
+    outline-offset: 2px;
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Reduced motion compliance (WCAG 2.2 AA) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
