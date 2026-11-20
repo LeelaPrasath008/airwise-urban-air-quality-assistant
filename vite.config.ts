@@ -4,7 +4,22 @@ import fs from 'fs';
 import path from 'path';
 import {defineConfig} from 'vite';
 
+function getAllowedHosts(): string[] {
+  const hosts = new Set<string>(['airwise-urban-air-quality-assistant.onrender.com']);
+  if (process.env.APP_URL) {
+    try {
+      const { hostname } = new URL(process.env.APP_URL);
+      if (hostname) hosts.add(hostname);
+    } catch {
+      // Ignore malformed APP_URL
+    }
+  }
+  return Array.from(hosts);
+}
+
 export default defineConfig(() => {
+  const allowedHosts = getAllowedHosts();
+
   return {
     plugins: [
       react(),
@@ -53,11 +68,15 @@ export default defineConfig(() => {
       },
     },
     server: {
+      allowedHosts,
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modify—file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
+    },
+    preview: {
+      allowedHosts,
     },
   };
 });
