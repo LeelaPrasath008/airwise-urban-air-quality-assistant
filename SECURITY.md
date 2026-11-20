@@ -20,16 +20,23 @@ AIRWISE is designed with privacy minimization and defense-in-depth from the firs
 - Gemini AI system instructions explicitly enforce instruction hierarchy (ignoring untrusted override attempts), isolate user context inside `<user_household_context>` delimiters, impose a 15-second per-attempt upstream timeout (`withTimeout`), validate structured routine JSON with Zod (`ValidatedRoutineOutputSchema`), and sanitize all returned text fields.
 - All user-supplied and AI-generated content is rendered via React's native escaped text nodes—`dangerouslySetInnerHTML` is never used anywhere in the codebase.
 
-### 4. HTTP Security Headers & CORS
-- Configured via `helmet` (`server/app.ts`) with Content Security Policy (`default-src 'self'`, `object-src 'none'`, `base-uri 'self'`, strict `frame-ancestors`), `X-Content-Type-Options: nosniff`, and `X-Powered-By` disabled.
-- `/api/*` enforces a strict CORS origin allowlist (`localhost:3000`, configured `APP_URL`, `ALLOWED_ORIGINS`, and trusted Cloud Run deployment hosts), returning `403` for unauthorized cross-origin requests.
+### 4. HTTP Security Headers, Strict CSP & CORS
+- Configured via `helmet` (`server/app.ts`) with separate **Production** and **Development** Content Security Policies:
+  - **Production CSP**: `default-src 'self'`, `script-src 'self'` (**zero `'unsafe-inline'`, zero `'unsafe-eval'`**), `script-src-attr 'none'`, `connect-src 'self'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `upgrade-insecure-requests`, and strict `frame-ancestors` (no `*.run.app` or `localhost` wildcards).
+  - **Development CSP**: permits `'unsafe-inline'` strictly for Vite React Fast Refresh preamble and `ws:`/`wss:` for dev transport, with **`'unsafe-eval'` disabled in both dev and production**.
+- `Permissions-Policy` explicitly disables `camera=()`, `microphone=()`, `payment=()`, and `usb=()`, permitting `geolocation=(self)` only for user-initiated location lookup.
+- `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, and `X-Powered-By` disabled.
+- `/api/*` enforces a strict CORS origin allowlist: exact same-host origin plus explicitly configured `APP_URL` and `ALLOWED_ORIGINS` (`localhost:3000` allowed only in development). Broad wildcard trust of arbitrary third-party `*.run.app` origins is explicitly rejected with HTTP `403`.
 
-### 5. Rate Limiting & Safe Error Handling
-- `express-rate-limit` protects `/api/*` (180 requests / 15 min per IP) with a tighter window on AI generation endpoints `/api/routine` and `/api/ai/chat` (30 requests / 15 min per IP).
+### 5. Proxy Trust, Rate Limiting & Safe Error Handling
+- Express `trust proxy` is resolved conservatively via `resolveTrustProxy`: disabled (`false`) by default in local/direct deployments so forged `X-Forwarded-For` headers cannot spoof client IPs, automatically set to `1` hop when Cloud Run's `K_SERVICE` environment is present, or explicitly configured via `TRUST_PROXY` (never allowing unbounded `true`).
+- `express-rate-limit` protects `/api/*` (180 requests / 15 min per resolved IP) with a tighter window on AI generation endpoints `/api/routine` and `/api/ai/chat` (30 requests / 15 min per IP).
 - Manual cache refresh (`refresh=true`) enforces a 30-second server-side cooldown per coordinate to prevent upstream API hammering.
+- Explicit `Cache-Control` headers enforce `no-store` on `/api/health`, `/api/routine`, and `/api/ai/chat`, `public, max-age=300` on `/api/locations/presets`, and `private, max-age=180` on `/api/air-quality`.
 - Centralized Express error handling converts malformed JSON to HTTP `400`, oversized bodies to HTTP `413`, unknown `/api/*` paths to HTTP `404` JSON, and unexpected exceptions to generic HTTP `500` responses without leaking internal stack traces, upstream SDK error messages, file paths, or environment variables.
 
 ### 6. Limitations & Residual Risks
 - Rate limiting and response caching currently use in-memory stores suitable for single-instance deployment; horizontally scaled multi-instance deployments should swap in a shared Redis store.
 - Prompt injection against LLMs cannot be eliminated 100% by prompt hardening alone; AIRWISE mitigates impact by isolating AI prompts to stateless non-privileged text generation without database write tools or secret access, enforcing strict Zod schema validation on both inputs and outputs, and escaping all rendered text.
+
 

@@ -9,9 +9,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function startServer() {
-  const app = createApiApp();
-  const port = Number(process.env.PORT || 3000);
   const isProd = process.env.NODE_ENV === 'production';
+  const app = createApiApp({ isProduction: isProd });
+  const port = Number(process.env.PORT || 3000);
 
   if (!isProd) {
     const { createServer: createViteServer } = await import('vite');
@@ -22,10 +22,13 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distDir = path.resolve(__dirname, 'dist');
-    app.use(express.static(distDir, { maxAge: '1h' }));
+    const assetsDir = path.join(distDir, 'assets');
+    app.use('/assets', express.static(assetsDir, { maxAge: '1y', immutable: true }));
+    app.use(express.static(distDir, { maxAge: '1h', index: false }));
     app.get('*', (_req, res) => {
       const indexPath = path.join(distDir, 'index.html');
       if (fs.existsSync(indexPath)) {
+        res.setHeader('Cache-Control', 'no-cache');
         res.sendFile(indexPath);
       } else {
         res.status(503).send('Application bundle not found. Run npm run build first.');

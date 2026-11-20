@@ -1,16 +1,13 @@
 import { type FormEvent, useMemo, useState } from 'react';
 import { Award, Plus, Trash2 } from 'lucide-react';
 import { ACTION_ESTIMATE_FACTORS, computeImpactSummary } from '../../shared/sustainability.ts';
+import { sanitizePlainText } from '../../shared/sanitize.ts';
 import type { ActionCategory, TrackedAction } from '../../shared/types.ts';
 
 interface ImpactTrackerViewProps {
   actions: TrackedAction[];
   onAddAction: (action: TrackedAction) => void;
   onDeleteAction: (id: string) => void;
-}
-
-function sanitizeClientText(value: string, maxLen: number): string {
-  return value.replace(/[<>]/g, '').trim().slice(0, maxLen);
 }
 
 export function ImpactTrackerView({
@@ -31,7 +28,7 @@ export function ImpactTrackerView({
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    const cleanTitle = sanitizeClientText(title || factor.label, 120);
+    const cleanTitle = sanitizePlainText(title || factor.label, 120);
     const numQty = Number(quantity);
 
     if (cleanTitle.length < 2) {
@@ -49,7 +46,7 @@ export function ImpactTrackerView({
 
     setFormError(null);
     const estimatedCo2SavedKg = Math.round(numQty * factor.co2KgPerUnit * 100) / 100;
-    const cleanNotes = sanitizeClientText(notes, 240);
+    const cleanNotes = sanitizePlainText(notes, 240);
 
     onAddAction({
       id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,

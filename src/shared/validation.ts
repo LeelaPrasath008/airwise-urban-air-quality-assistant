@@ -1,15 +1,7 @@
 import { z } from 'zod';
+import { sanitizePlainText } from './sanitize.ts';
 
-/**
- * Strips control characters and collapses excessive whitespace to prevent log injection or malformed prompts.
- */
-export function sanitizePlainText(input: string, maxLength = 500): string {
-  return input
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
-    .replace(/[<>]/g, '')
-    .trim()
-    .slice(0, maxLength);
-}
+export { sanitizePlainText };
 
 export const LocationQuerySchema = z.object({
   q: z

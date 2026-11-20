@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
-import { createApiApp } from '../../server/app.ts';
+import { createApiApp, resolveTrustProxy } from '../../server/app.ts';
 import { clearAirQualityCaches } from '../../server/services/airQualityService.ts';
 
 describe('AIRWISE Backend API Integration & Security Controls', () => {
@@ -291,5 +291,99 @@ describe('AIRWISE Backend API Integration & Security Controls', () => {
     expect(notFoundRes.status).toBe(404);
     expect(notFoundRes.body.error).toBe('API endpoint not found.');
   });
+
+  it('rejects arbitrary *.run.app origins and dev localhost in production while allowing explicit trusted origins', async () => {
+    const prodApp = createApiApp({
+      isProduction: true,
+      allowedOrigins: ['https://airwise.trusted.example'],
+    });
+
+    const arbitraryCloudRun = await request(prodApp)
+      .get('/api/health')
+      .set('Origin', 'https://untrusted-tenant-xyz.us-central1.run.app');
+    expect(arbitraryCloudRun.status).toBe(403);
+
+    const devOriginInProd = await request(prodApp)
+      .get('/api/health')
+      .set('Origin', 'http://localhost:3000');
+    expect(devOriginInProd.status).toBe(403);
+
+    const explicitAllowed = await request(prodApp)
+      .get('/api/health')
+      .set('Origin', 'https://airwise.trusted.example');
+    expect(explicitAllowed.status).toBe(200);
+    expect(explicitAllowed.headers['access-control-allow-origin']).toBe(
+      'https://airwise.trusted.example'
+    );
+    expect(explicitAllowed.headers.vary).toContain('Origin');
+  });
+
+  it('enforces strict production CSP without unsafe-inline/unsafe-eval scripts and sets Permissions-Policy', async () => {
+    const prodApp = createApiApp({ isProduction: true });
+    const prodRes = await request(prodApp).get('/api/health');
+    const prodCsp = prodRes.headers['content-security-policy'] as string;
+
+    expect(prodCsp).toContain("script-src 'self'");
+    expect(prodCsp).not.toContain("'unsafe-eval'");
+    expect(prodCsp).not.toMatch(/script-src[^;]*'unsafe-inline'/);
+    expect(prodCsp).not.toContain('*.run.app');
+    expect(prodCsp).not.toContain('http://localhost:*');
+    expect(prodRes.headers['permissions-policy']).toContain('camera=()');
+    expect(prodRes.headers['permissions-policy']).toContain('microphone=()');
+
+    const devApp = createApiApp({ isProduction: false });
+    const devRes = await request(devApp).get('/api/health');
+    const devCsp = devRes.headers['content-security-policy'] as string;
+    expect(devCsp).not.toContain("'unsafe-eval'");
+    expect(devCsp).toContain("connect-src 'self' ws: wss:");
+  });
+
+  it('resolves trust proxy conservatively and prevents X-Forwarded-For rate-limit spoofing when unproxied', async () => {
+    expect(resolveTrustProxy(undefined, undefined, false)).toBe(false);
+    expect(resolveTrustProxy(undefined, undefined, true)).toBe(1);
+    expect(resolveTrustProxy(undefined, 'true', false)).toBe(1);
+    expect(resolveTrustProxy(undefined, 'false', true)).toBe(false);
+    expect(resolveTrustProxy(undefined, '2', false)).toBe(2);
+
+    const app = createApiApp({ trustProxy: false, apiRateLimitMax: 2 });
+    const r1 = await request(app).get('/api/health').set('X-Forwarded-For', '203.0.113.1');
+    const r2 = await request(app).get('/api/health').set('X-Forwarded-For', '203.0.113.2');
+    const r3 = await request(app).get('/api/health').set('X-Forwarded-For', '203.0.113.3');
+
+    expect(r1.status).toBe(200);
+    expect(r2.status).toBe(200);
+    expect(r3.status).toBe(429);
+  });
+
+  it('sets explicit Cache-Control policies across public presets, health, and private AI endpoints', async () => {
+    const app = createApiApp();
+
+    const presetsRes = await request(app).get('/api/locations/presets');
+    expect(presetsRes.headers['cache-control']).toBe('public, max-age=300');
+
+    const healthRes = await request(app).get('/api/health');
+    expect(healthRes.headers['cache-control']).toBe('no-store');
+
+    const chatRes = await request(app)
+      .post('/api/ai/chat')
+      .send({
+        message: 'Is it safe to walk outside?',
+        history: [],
+        context: {
+          locationName: 'New Delhi, India',
+          standard: 'INDIA_CPCB',
+          aqi: 250,
+          categoryLabel: 'Poor',
+          pm25: 105,
+          pm10: 190,
+          temperatureC: 16,
+          humidityPercent: 68,
+          weatherCondition: 'Haze',
+        },
+      });
+    expect(chatRes.status).toBe(200);
+    expect(chatRes.headers['cache-control']).toBe('no-store');
+  });
 });
+
 

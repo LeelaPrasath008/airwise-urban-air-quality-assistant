@@ -15,9 +15,9 @@ npm run lint
 npm run build
 ```
 
-## Test Coverage Breakdown
+## Test Coverage Breakdown (38 Automated Tests across 4 Suites)
 
-1. **Unit Tests (`tests/unit/domain.test.ts` — 15 tests)**
+1. **Domain & Cache Unit Tests (`tests/unit/domain.test.ts` — 15 tests)**
    - Indian National AQI (CPCB) sub-index breakpoint calculations across all 6 bands (Good, Satisfactory, Moderate, Poor, Very Poor, Severe) and all 6 pollutants (`PM2.5`, `PM10`, `NO2`, `O3`, `SO2`, `CO`).
    - Gap, zero, negative, `NaN`, and extreme (`>500`) AQI concentration edge cases.
    - US EPA AQI breakpoint calculations and country-default selection.
@@ -25,19 +25,30 @@ npm run build
    - `BoundedTTLCache` max-entry eviction and TTL expiration behavior.
    - Indoor Air Quality Optimizer logic (window closing during high outdoor AQI, HEPA CADR sizing, evidence-based vs. general separation, ozone/burning safety warnings).
    - Sustainability impact aggregation (weekly/monthly totals, CO₂e estimates, achievement milestones) and transparent assumption verification.
-   - Input sanitization and Zod validation error handling.
+   - Input sanitization (`sanitizePlainText`) and Zod validation error handling.
 
-2. **API Integration & Security Tests (`tests/integration/api.test.ts` — 11 tests)**
+2. **WCAG 2.2 AA Color Contrast Unit Tests (`tests/unit/accessibility.test.ts` — 2 tests)**
+   - W3C relative luminance contrast ratio verification (`>= 4.5:1`) across all 15 core AIRWISE foreground/background UI color pairs.
+   - W3C relative luminance contrast verification (`>= 4.5:1`) for all 6 Indian CPCB and all 6 US EPA AQI category text/tint combinations.
+
+3. **API Integration & Security Tests (`tests/integration/api.test.ts` — 15 tests)**
    - `/api/health` contract and Helmet security headers (`X-Content-Type-Options`, `Content-Security-Policy`, hidden `X-Powered-By`).
+   - Strict CORS enforcement rejecting arbitrary third-party `*.run.app` origins and dev localhost in production (`403`) while allowing explicitly configured trusted origins.
+   - Separated strict Production CSP (`script-src 'self'`, no `'unsafe-inline'`, no `'unsafe-eval'`) vs. Development CSP (no `'unsafe-eval'`), plus `Permissions-Policy` header enforcement.
+   - Environment-aware `resolveTrustProxy` behavior and proof that forged `X-Forwarded-For` headers cannot bypass rate limiting when unproxied.
+   - Explicit `Cache-Control` policies across `/api/locations/presets`, `/api/health`, `/api/air-quality`, and `/api/ai/chat`.
    - `/api/locations/presets` and `/api/locations/search` validation.
    - `/api/air-quality` live Open-Meteo parsing (`PM2.5`, `PM10`, `NO2`, `O3`, `SO2`, `CO`), TTL caching (`cacheHit: true`), concurrent request deduplication, 30s manual refresh cooldown, coordinate validation, and transparent demonstration fallback on network failure or HTTP 503.
    - `/api/routine` structured Morning/Afternoon/Evening generation containing all 6 mandatory fields per action.
    - `/api/ai/chat` contextual response, XSS script-tag sanitization, and prompt-injection resilience without leaking secrets or raw error traces.
-   - CORS rejection (`403`) for unauthorized origins, rate-limit enforcement (`429`), malformed JSON (`400`), oversized payload rejection (`413`), and unknown `/api/*` route JSON `404`.
+   - Malformed JSON (`400`), oversized payload rejection (`413`), rate limiting (`429`), and unknown `/api/*` route JSON `404`.
 
-3. **Frontend, End-to-End Journey & WCAG 2.2 AA Accessibility Tests (`tests/frontend/app.test.tsx` — 4 tests)**
+4. **Frontend, End-to-End Journey & WCAG 2.2 AA Accessibility Tests (`tests/frontend/app.test.tsx` — 6 tests)**
    - Full end-to-end journey across all 7 modules: onboarding & live AQI dashboard (with CPCB ↔ US EPA switcher & `refresh=true`) -> location selector modal -> Daily Planner routine generation -> Indoor Air Optimizer -> Sustainable Choices logging -> AIRWISE AI chat -> Community pledge -> Personal Impact CRUD (log + delete).
    - WCAG 2.2 AA modal focus trapping (`Tab` cycling) and `Escape` focus restoration back to triggering controls.
    - Network error fallback UI and mobile navigation drawer toggling.
    - Automated `axe-core` WCAG 2.2 AA audits across all 7 modules and open Location Selector / Alert Preferences modals verifying zero violations.
+   - `AQIChart` keyboard range scrubber updates, debounced city search, and graceful browser geolocation denial error handling.
+   - Stale-routine notice on city/AQI shift and accessible form validation `aria-invalid`/`aria-describedby` bindings.
+
 

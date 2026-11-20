@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import App from '../../src/App.tsx';
@@ -126,6 +126,27 @@ function setupMockFetch() {
               longitude: 77.59,
             },
           ],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (url.includes('/api/locations/search')) {
+      return new Response(
+        JSON.stringify({
+          results: [
+            {
+              id: 'in-pune',
+              name: 'Pune',
+              region: 'Maharashtra',
+              country: 'India',
+              countryCode: 'IN',
+              latitude: 18.52,
+              longitude: 73.86,
+            },
+          ],
+          source: 'Open-Meteo Geocoding API',
+          isFallback: false,
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } }
       );
@@ -357,5 +378,80 @@ describe('AIRWISE Frontend, E2E User Journey & WCAG 2.2 AA Accessibility', () =>
       expect((await axe(container)).violations).toEqual([]);
     }
   }, 45000);
+
+  it('supports keyboard AQIChart hour scrubbing, debounced location search, and graceful geolocation denial', async () => {
+    setupMockFetch();
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText('268');
+
+    // Keyboard range scrubber updates active hour readout
+    const scrubber = screen.getByLabelText(/Inspect hour/i) as HTMLInputElement;
+    fireEvent.change(scrubber, { target: { value: '1' } });
+    expect(screen.getByText(/AQI 187/i)).toBeInTheDocument();
+
+    // Debounced city search & graceful geolocation permission denial
+    const originalGeolocation = navigator.geolocation;
+    Object.defineProperty(navigator, 'geolocation', {
+      configurable: true,
+      value: {
+        getCurrentPosition: (
+          _success: PositionCallback,
+          errorCb?: PositionErrorCallback | null
+        ) => {
+          errorCb?.({
+            code: 1,
+            PERMISSION_DENIED: 1,
+            POSITION_UNAVAILABLE: 2,
+            TIMEOUT: 3,
+            message: 'Denied',
+          } as GeolocationPositionError);
+        },
+      },
+    });
+
+    try {
+      await user.click(
+        screen.getByRole('button', { name: /Change monitoring location, currently New Delhi/i })
+      );
+      const searchInput = await screen.findByLabelText(/Search city or urban area/i);
+      await user.type(searchInput, 'Pune');
+      expect(await screen.findByRole('button', { name: /Pune, Maharashtra/i })).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /Use my location/i }));
+      expect(await screen.findByRole('alert')).toHaveTextContent(/Location permission was declined/i);
+    } finally {
+      Object.defineProperty(navigator, 'geolocation', {
+        configurable: true,
+        value: originalGeolocation,
+      });
+    }
+  });
+
+  it('displays stale-routine notice on city change and binds aria-invalid/aria-describedby on form validation error', async () => {
+    setupMockFetch();
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText('268');
+
+    // Generate routine while New Delhi is active (MOCK_ROUTINE is for Bengaluru AQI 74 -> triggers staleness check)
+    await user.click(screen.getByRole('button', { name: /^Daily Planner$/i }));
+    await user.click(await screen.findByRole('button', { name: /Generate daily routine/i }));
+    expect(
+      await screen.findByText(/This routine was generated for Bengaluru, India/i)
+    ).toBeInTheDocument();
+
+    // Impact tracker invalid quantity binds aria-invalid and aria-describedby
+    await user.click(screen.getByRole('button', { name: /^My Impact$/i }));
+    const qtyInput = await screen.findByLabelText(/Quantity/i);
+    fireEvent.change(qtyInput, { target: { value: '0' } });
+    fireEvent.submit(qtyInput.closest('form')!);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveAttribute('id', 'impact-form-error');
+    expect(qtyInput).toHaveAttribute('aria-invalid', 'true');
+    expect(qtyInput).toHaveAttribute('aria-describedby', 'impact-form-error');
+  });
 });
+
 
