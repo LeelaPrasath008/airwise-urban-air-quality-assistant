@@ -8,14 +8,14 @@ AIRWISE uses **Vitest**, **Supertest**, **React Testing Library**, and **`axe-co
 # Run full automated test suite
 npm test
 
-# Run strict TypeScript type checker
+# Run strict TypeScript type checker (`tsc --noEmit`)
 npm run lint
 
 # Verify production build
 npm run build
 ```
 
-## Test Coverage Breakdown (45 Automated Tests across 4 Suites)
+## Test Coverage Breakdown (77 Automated Tests across 8 Suites)
 
 1. **Domain & Cache Unit Tests (`tests/unit/domain.test.ts` — 18 tests)**
    - Indian National AQI (CPCB) sub-index breakpoint calculations across all 6 bands (Good, Satisfactory, Moderate, Poor, Very Poor, Severe) and all 6 pollutants (`PM2.5`, `PM10`, `NO2`, `O3`, `SO2`, `CO`).
@@ -32,24 +32,43 @@ npm run build
    - W3C relative luminance contrast ratio verification (`>= 4.5:1`) across all 15 core AIRWISE foreground/background UI color pairs.
    - W3C relative luminance contrast verification (`>= 4.5:1`) for all 6 Indian CPCB and all 6 US EPA AQI category text/tint combinations.
 
-3. **API Integration & Security Tests (`tests/integration/api.test.ts` — 15 tests)**
+3. **AI Service & Prompt Isolation Unit Tests (`tests/unit/aiService.test.ts` — 12 tests)**
+   - Rule-based routine and assistant fallback behavior when `GEMINI_API_KEY` is unconfigured or placeholder, including prompt-injection resilience and `<`/`>` output sanitization.
+   - Retry/timeout helper behavior (`withRetry`, `withTimeout`).
+   - Static Gemini `systemInstruction` invariance across adversarial multiline environmental metadata and single-line normalization inside `<environmental_context>` / `<user_household_context>` payloads.
+   - Mocked live Gemini SDK orchestration for routine generation and assistant replies (zero real network calls or real API keys), plus fallback verification on malformed JSON, Zod schema mismatch, empty model output, and thrown SDK exceptions without leaking raw errors.
+
+4. **Air Quality Service Unit Tests (`tests/unit/airQualityService.test.ts` — 4 tests)**
+   - Upstream Open-Meteo snapshot mapping, fallback snapshot generation, cache reuse, concurrent request deduplication, and 30-second manual refresh cooldown.
+
+5. **API Integration & Security Tests (`tests/integration/api.test.ts` — 15 tests)**
    - `/api/health` contract and Helmet security headers (`X-Content-Type-Options`, `Content-Security-Policy`, hidden `X-Powered-By`).
    - Strict CORS enforcement rejecting arbitrary third-party `*.run.app` origins and dev localhost in production (`403`) while allowing explicitly configured trusted origins.
    - Separated strict Production CSP (`script-src 'self'`, no `'unsafe-inline'`, no `'unsafe-eval'`) vs. Development CSP (no `'unsafe-eval'`), plus `Permissions-Policy` header enforcement.
    - Environment-aware `resolveTrustProxy` behavior and proof that forged `X-Forwarded-For` headers cannot bypass rate limiting when unproxied.
-   - Explicit `Cache-Control` policies across `/api/locations/presets`, `/api/health`, `/api/air-quality`, and `/api/ai/chat`.
+   - Explicit `Cache-Control` policies across `/api/locations/presets`, `/api/health`, `/api/air-quality` (`private, max-age=180` normally and `no-store` when `refresh=true`), and `/api/ai/chat`.
    - `/api/locations/presets` and `/api/locations/search` validation.
    - `/api/air-quality` live Open-Meteo parsing (`PM2.5`, `PM10`, `NO2`, `O3`, `SO2`, `CO`), TTL caching (`cacheHit: true`), concurrent request deduplication, 30s manual refresh cooldown, coordinate validation, and transparent demonstration fallback on network failure or HTTP 503.
    - `/api/routine` structured Morning/Afternoon/Evening generation containing all 6 mandatory fields per action.
    - `/api/ai/chat` contextual response, XSS script-tag sanitization, and prompt-injection resilience without leaking secrets or raw error traces.
    - Malformed JSON (`400`), oversized payload rejection (`413`), rate limiting (`429`), and unknown `/api/*` route JSON `404`.
 
-4. **Frontend, End-to-End Journey & WCAG 2.2 AA Accessibility Tests (`tests/frontend/app.test.tsx` — 10 tests)**
-   - Full end-to-end journey across all 7 modules: onboarding & live AQI dashboard (with CPCB ↔ US EPA switcher & `refresh=true`) -> location selector modal -> Daily Planner routine generation -> Indoor Air Optimizer -> Sustainable Choices logging -> AIRWISE AI chat -> Community pledge -> Personal Impact CRUD (log + delete).
+6. **Frontend, End-to-End Journey & WCAG 2.2 AA Accessibility Tests (`tests/frontend/app.test.tsx` — 12 tests)**
+   - Full end-to-end journey across all 7 modules: onboarding & live AQI dashboard (with CPCB ↔ US EPA switcher & `refresh=true` with `cache: 'no-store'`) -> location selector modal -> Daily Planner routine generation -> Indoor Air Optimizer -> Sustainable Choices logging -> AIRWISE AI chat -> Community pledge -> Personal Impact CRUD (log + delete).
    - WCAG 2.2 AA modal focus trapping (`Tab` cycling) and `Escape` focus restoration back to triggering controls.
-   - Network error fallback UI and mobile navigation drawer toggling.
-   - Automated `axe-core` WCAG 2.2 AA audits across all 7 modules and open Location Selector / Alert Preferences modals verifying zero violations.
+   - Network error fallback UI, `AppShell` skip navigation, desktop `aria-current`, mobile navigation drawer focus/selection, and drawer `axe-core` compliance.
+   - Automated `axe-core` WCAG 2.2 AA audits across all 7 modules, open Location Selector / Alert Preferences modals, and Dashboard both before and after dismissing onboarding (verifying valid heading hierarchy and zero violations).
+   - Toast dismiss button minimum WCAG 2.2 AA target size (`>= 24x24px`) and `prefers-reduced-motion` scrolling behavior in `AssistantView`.
    - `AQIChart` keyboard range scrubber updates, location-switch scrubber reset, debounced city search with aborted-request loading guard, and graceful browser geolocation denial error handling.
    - Fresh vs. stale-routine notice checks, logged-button reset on routine regeneration, React `<StrictMode>` community pledge toggles, and accessible form validation `aria-invalid`/`aria-describedby` bindings.
 
+7. **Frontend Reliability & Storage Safety Regression Tests (`tests/frontend/reliability.test.tsx` — 8 tests)**
+   - `useDialogFocus` focus stability inside modals across parent re-renders.
+   - Non-blocking inline error banner with Retry when manual refresh or location switch fails after data is loaded.
+   - Safe `useLocalStorage` persistence, corrupted JSON recovery, and quota/write error resilience.
+   - `LocationSelectorModal` geolocation abort/unmount guard, southern/western hemisphere coordinate formatting, and transient error reset on reopen.
 
+8. **Core Hooks & Lazy Module Error Boundary Tests (`tests/frontend/hooksAndBoundary.test.tsx` — 6 tests)**
+   - `useToast` timed dismissal, replacement timers, and unmount cleanup.
+   - `useAirQualityData` initial fetch, abort handling, standard switching, refresh cooldown, and non-blocking error recovery.
+   - `ModuleErrorBoundary` safe render-error capture (no raw stack/error leakage), Retry recovery, `resetKey` reset, and Back to Dashboard fallback.

@@ -355,14 +355,27 @@ describe('AIRWISE Backend API Integration & Security Controls', () => {
     expect(r3.status).toBe(429);
   });
 
-  it('sets explicit Cache-Control policies across public presets, health, and private AI endpoints', async () => {
+  it('sets explicit Cache-Control policies across public presets, health, air-quality (normal vs manual refresh), and private AI endpoints', async () => {
     const app = createApiApp();
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Offline test'));
 
     const presetsRes = await request(app).get('/api/locations/presets');
     expect(presetsRes.headers['cache-control']).toBe('public, max-age=300');
 
     const healthRes = await request(app).get('/api/health');
     expect(healthRes.headers['cache-control']).toBe('no-store');
+
+    const aqNormalRes = await request(app).get(
+      '/api/air-quality?lat=28.6139&lon=77.209&city=New%20Delhi&country=India&countryCode=IN&standard=INDIA_CPCB'
+    );
+    expect(aqNormalRes.status).toBe(200);
+    expect(aqNormalRes.headers['cache-control']).toBe('private, max-age=180');
+
+    const aqRefreshRes = await request(app).get(
+      '/api/air-quality?lat=28.6139&lon=77.209&city=New%20Delhi&country=India&countryCode=IN&standard=INDIA_CPCB&refresh=true'
+    );
+    expect(aqRefreshRes.status).toBe(200);
+    expect(aqRefreshRes.headers['cache-control']).toBe('no-store');
 
     const chatRes = await request(app)
       .post('/api/ai/chat')

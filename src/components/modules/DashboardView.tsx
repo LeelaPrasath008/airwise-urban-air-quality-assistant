@@ -97,6 +97,8 @@ export function DashboardView({
   if (!snapshot || !bestVent) return null;
 
   const scaleLegend = getAQIScaleLegend(standard);
+  const SectionHeading = showOnboarding ? 'h3' : 'h2';
+  const CardHeading = showOnboarding ? 'h4' : 'h3';
 
   return (
     <div className="space-y-6">
@@ -273,18 +275,26 @@ export function DashboardView({
           {/* Health & Outdoor Summary */}
           <div className="pt-4 border-t border-[#E2E8E5] grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
             <div>
-              <h3 className="font-semibold text-[#111C18] mb-1">Health impact summary</h3>
+              <SectionHeading className="font-semibold text-[#111C18] mb-1">
+                Health impact summary
+              </SectionHeading>
               <p className="text-[#4A5B54] leading-relaxed">{snapshot.category.healthSummary}</p>
             </div>
             <div>
-              <h3 className="font-semibold text-[#111C18] mb-1">Outdoor activity guidance</h3>
+              <SectionHeading className="font-semibold text-[#111C18] mb-1">
+                Outdoor activity guidance
+              </SectionHeading>
               <p className="text-[#4A5B54] leading-relaxed">{snapshot.category.outdoorGuidance}</p>
             </div>
           </div>
         </section>
 
         {/* Pollutants & Weather Telemetry Panel */}
-        <PollutantTelemetryCard pollutants={snapshot.pollutants} weather={snapshot.weather} />
+        <PollutantTelemetryCard
+          pollutants={snapshot.pollutants}
+          weather={snapshot.weather}
+          headingLevel={SectionHeading}
+        />
       </div>
 
       {/* 24-Hour Pollution Trend & Forecast */}
@@ -294,9 +304,9 @@ export function DashboardView({
       >
         <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2 mb-4">
           <div>
-            <h3 className="text-lg font-semibold text-[#111C18]">
+            <SectionHeading className="text-lg font-semibold text-[#111C18]">
               24-hour AQI trend &amp; short-range forecast
-            </h3>
+            </SectionHeading>
             <p className="text-xs text-[#5E7068]">
               Select or focus any hour to inspect PM2.5 and find lower-pollution windows for errands or airing rooms.
             </p>
@@ -307,9 +317,9 @@ export function DashboardView({
 
       {/* Complete Guided User Journey Shortcuts */}
       <section aria-label="Recommended next actions">
-        <h3 className="text-lg font-semibold text-[#111C18] mb-3">
+        <SectionHeading className="text-lg font-semibold text-[#111C18] mb-3">
           Act on today&rsquo;s air quality
-        </h3>
+        </SectionHeading>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
             {
@@ -347,7 +357,9 @@ export function DashboardView({
               >
                 <div className="space-y-2">
                   <Icon className="h-5 w-5 text-[#11382B]" aria-hidden="true" />
-                  <h4 className="text-base font-semibold text-[#111C18]">{item.title}</h4>
+                  <CardHeading className="text-base font-semibold text-[#111C18]">
+                    {item.title}
+                  </CardHeading>
                   <p className="text-xs text-[#4A5B54] leading-relaxed">{item.desc}</p>
                 </div>
                 <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#11382B]">

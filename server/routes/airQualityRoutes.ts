@@ -61,7 +61,7 @@ export function createAirQualityRouter(): Router {
         bypassCache,
       });
 
-      res.setHeader('Cache-Control', 'private, max-age=180');
+      res.setHeader('Cache-Control', bypassCache ? 'no-store' : 'private, max-age=180');
       res.json(snapshot);
     } catch (err) {
       next(err);

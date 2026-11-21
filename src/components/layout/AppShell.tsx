@@ -230,7 +230,7 @@ export function AppShell({
                 type="button"
                 onClick={onDismissToast}
                 aria-label="Dismiss notification"
-                className="text-xs text-[#A7F3D0] hover:text-white"
+                className="min-h-[32px] min-w-[44px] px-2.5 py-1 inline-flex items-center justify-center rounded-md text-xs font-medium text-[#A7F3D0] hover:text-white hover:bg-white/10 transition-colors shrink-0"
               >
                 Dismiss
               </button>

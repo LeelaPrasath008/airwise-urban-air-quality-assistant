@@ -20,7 +20,7 @@ AIRWISE combines deterministic environmental science with structured server-side
 2. **Dynamic Decision Engine**:
    - **AQI & Ventilation Classification (`src/shared/aqi.ts`)**: Computes exact pollutant sub-indices, identifies the dominant pollutant, maps severity levels (1–6), and scans upcoming forecast hours to identify the cleanest window for natural ventilation (safe only when forecast AQI ≤ 120 and PM2.5 ≤ 45 µg/m³).
    - **Indoor Air Optimizer (`src/shared/sustainability.ts`)**: Links room area, cooking fuel, exhaust availability, incense/candle habits, and outdoor AQI to calculate recommended True HEPA CADR (`m³/h`), separate evidence-based guidance (EPA/WHO/ASHRAE) from general practical tips, and trigger explicit safety warnings (against ozone generators, indoor burning, and unverified sprays).
-   - **Structured GenAI Routine & Assistant (`server/services/aiService.ts`)**: Enforces prompt-injection defenses (instruction hierarchy + `<user_household_context>` delimiters), a strict 15-second per-attempt timeout with retry, structured JSON schema generation for Morning/Afternoon/Evening routines (each requiring all 6 fields: what to do, why recommended, how to implement, environmental benefit, health consideration, and effort/cost), and runtime Zod validation + sanitization (`ValidatedRoutineOutputSchema`) on model output.
+   - **Structured GenAI Routine & Assistant (`server/services/aiService.ts`, `server/services/ai/schemas.ts`)**: Enforces prompt-injection defenses with strictly static trusted `systemInstruction` strings, single-line normalization of environmental metadata, and delimited untrusted data blocks (`<user_household_context>`, `<environmental_context>`, `<user_message>`), paired with a strict 15-second per-attempt timeout with retry, structured JSON schema generation for Morning/Afternoon/Evening routines (each requiring all 6 fields: what to do, why recommended, how to implement, environmental benefit, health consideration, and effort/cost), and runtime Zod validation + sanitization (`ValidatedRoutineOutputSchema`) on model output.
 3. **Transparent Rule-Based Fallback**: If `GEMINI_API_KEY` is unconfigured or the upstream AI call times out or returns invalid output, AIRWISE generates context-tailored, rule-based routines and assistant guidance clearly labeled as `Rule-Based Fallback`—never leaking raw SDK errors or stack traces.
 
 ## 5. Features
@@ -43,30 +43,46 @@ AIRWISE combines deterministic environmental science with structured server-side
 
 ## 7. Architecture
 ```
-├── server.ts                              # Express + Vite dev / immutable-asset prod entry point (port 3000)
+├── server.ts                                 # Express + Vite dev / immutable-asset prod entry point (port 3000)
 ├── server/
-│   ├── app.ts                             # Hardened Express API: Helmet (prod/dev CSP), strict CORS, trust proxy, rate limiters
-│   ├── cache.ts                           # Bounded TTL in-memory cache with FIFO/capacity eviction
+│   ├── app.ts                                # Express composition entry point
+│   ├── cache.ts                              # Bounded TTL in-memory cache with FIFO/capacity eviction
+│   ├── middleware/
+│   │   ├── security.ts                       # Helmet (prod/dev CSP), strict CORS, trust proxy, rate limiters
+│   │   └── errorHandlers.ts                  # JSON parse (400), payload limit (413), API 404 & safe 500 handlers
+│   ├── routes/
+│   │   ├── index.ts                          # Health check and API router composition
+│   │   ├── airQualityRoutes.ts               # /api/locations/* and /api/air-quality (with no-store on refresh=true)
+│   │   └── aiRoutes.ts                       # /api/routine and /api/ai/chat with AI rate limiting
 │   └── services/
-│       ├── airQualityService.ts           # Open-Meteo AQ, Weather & Geocoding + deduplication + demo fallback
-│       └── aiService.ts                   # Server-side @google/genai routines & chat + Zod output validation + fallback
+│       ├── airQualityService.ts              # Snapshot caching, in-flight deduplication, cooldown & orchestration
+│       ├── airQuality/                       # upstreamClient.ts, snapshotMapper.ts, fallback.ts
+│       ├── aiService.ts                      # Server-side @google/genai orchestration + fallback routing
+│       └── ai/                               # client.ts, schemas.ts (static instructions/delimiters), ruleBasedFallback.ts
 ├── src/
-│   ├── App.tsx                            # Main shell, keyboard-accessible nav, lazy-loaded module router
+│   ├── App.tsx                               # Application state, modals & lazy-loaded module routing
 │   ├── shared/
-│   │   ├── types.ts                       # Shared TypeScript domain contracts
-│   │   ├── aqi.ts                         # Exact 6-pollutant Indian CPCB & US EPA AQI breakpoint math
-│   │   ├── sanitize.ts                    # Zero-dependency plain-text sanitizer shared by client & server
-│   │   ├── sustainability.ts              # Backward-compatible barrel for split sustainability domain modules
-│   │   ├── sustainability/                # Focused factors, alternatives, community, indoor & impact modules
-│   │   └── validation.ts                  # Zod request schemas
-│   ├── services/api.ts                    # Frontend HTTP client with AbortSignal & refresh bypass support
-│   ├── hooks/                             # useLocalStorage, useDebounce, useDialogFocus (WCAG modal focus trap)
-│   └── components/                        # AQIChart, OnboardingHero, PollutantTelemetryCard, modals & 7 modules
+│   │   ├── types.ts                          # Shared TypeScript domain contracts
+│   │   ├── aqi.ts                            # Exact 6-pollutant Indian CPCB & US EPA AQI breakpoint math
+│   │   ├── sanitize.ts                       # Zero-dependency plain-text sanitizer shared by client & server
+│   │   ├── sustainability.ts                 # Backward-compatible barrel for split sustainability domain modules
+│   │   ├── sustainability/                   # Focused factors, alternatives, community, indoor & impact modules
+│   │   └── validation.ts                     # Zod request schemas
+│   ├── services/api.ts                       # Frontend HTTP client with AbortSignal & no-store refresh bypass
+│   ├── hooks/                                # useAirQualityData, useToast, useLocalStorage, useDebounce, useDialogFocus
+│   └── components/
+│       ├── layout/AppShell.tsx               # Skip link, desktop sidebar, mobile drawer, topbar & accessible toast
+│       ├── ModuleErrorBoundary.tsx           # Safe error boundary & recovery UI for lazy-loaded modules
+│       └── ...                               # AQIChart, OnboardingHero, PollutantTelemetryCard, modals & 7 modules
 └── tests/
-    ├── unit/domain.test.ts                # 18 domain, AQI breakpoint/boundary, cache & validation unit tests
-    ├── unit/accessibility.test.ts         # 2 W3C WCAG 2.2 AA color-contrast unit tests
-    ├── integration/api.test.ts            # 15 API, live/fallback, CORS, CSP, proxy & rate-limit integration tests
-    └── frontend/app.test.tsx              # 10 E2E 7-module journey, focus-trap, regression & axe-core tests
+    ├── unit/domain.test.ts                   # 18 domain, AQI breakpoint/boundary, cache & validation unit tests
+    ├── unit/accessibility.test.ts            # 2 W3C WCAG 2.2 AA color-contrast unit tests
+    ├── unit/aiService.test.ts                # 12 static-instruction isolation, mocked Gemini & fallback unit tests
+    ├── unit/airQualityService.test.ts        # 4 air-quality mapping, caching, deduplication & fallback unit tests
+    ├── integration/api.test.ts               # 15 API, cache headers, CORS, CSP, proxy & rate-limit integration tests
+    ├── frontend/app.test.tsx                 # 12 E2E 7-module journey, AppShell, focus-trap, motion & axe-core tests
+    ├── frontend/reliability.test.tsx         # 8 focus stability, non-blocking refresh, storage & geolocation tests
+    └── frontend/hooksAndBoundary.test.tsx    # 6 useToast, useAirQualityData & ModuleErrorBoundary regression tests
 ```
 
 ## 8. Installation Instructions
@@ -93,23 +109,24 @@ Configure `.env` on the server only (see `.env.example` for defaults; never pref
 - `FRAME_ANCESTORS`: Optional comma-separated trusted origins permitted to embed the app in an iframe.
 - `NODE_ENV`: `development` or `production` (production activates strict CSP without `'unsafe-inline'` scripts and immutable `/assets/*` caching).
 
-## 10. Running Instructions
+## 10. Running & Deployment Instructions
 ```bash
 # Development (Express API + Vite middleware on http://localhost:3000)
 npm run dev
 
-# Production build & start
+# Production build & start (serves dist/ with immutable /assets/* caching)
 npm run build
 NODE_ENV=production npm start
 ```
+For production deployment on a Node.js 20+ host (such as Cloud Run or Render), build with `npm run build`, start with `NODE_ENV=production npm start`, and configure `APP_URL` (your HTTPS origin), `TRUST_PROXY=1` when behind a single reverse proxy (auto-detected on Cloud Run via `K_SERVICE`), and `GEMINI_API_KEY` (optional; deterministic rule-based fallback activates automatically if omitted).
 
 ## 11. Testing Instructions
 See [TESTING.md](./TESTING.md) for the full test matrix.
 ```bash
-# Strict TypeScript check (noUnusedLocals & noUnusedParameters enabled)
+# Strict TypeScript type-checking via `tsc --noEmit` (noUnusedLocals & noUnusedParameters enabled)
 npm run lint
 
-# Run all 45 automated tests (unit, WCAG contrast, API/security integration, E2E & axe-core)
+# Run all 77 automated tests across 8 suites (unit, WCAG contrast, AI/AQ services, API/security, E2E & axe-core)
 npm test
 
 # Verify production bundle
@@ -129,5 +146,5 @@ See [SECURITY.md](./SECURITY.md) for full details.
 - **Server-Side Secrets Only**: `GEMINI_API_KEY` and `@google/genai` are strictly confined to `server/`; zero secrets appear in client bundles (`dist/`).
 - **Hardened HTTP Headers & Strict CSP**: Helmet enforces `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Permissions-Policy` (disabling camera, microphone, payment, USB), hidden `X-Powered-By`, and separated Production CSP (`script-src 'self'` with zero `'unsafe-inline'` or `'unsafe-eval'`).
 - **Strict CORS & Anti-Spoofing Proxy Trust**: No wildcard `*.run.app` origin trust; unauthorized cross-origin requests return HTTP `403`; conservative `trust proxy` resolution prevents forged `X-Forwarded-For` headers from bypassing rate limits (`180/15m` API, `30/15m` AI).
-- **Input, Payload & Output Safety**: Zod schema validation on all API inputs and Gemini JSON outputs, `32 KB` JSON body cap (HTTP `413`), malformed JSON handling (HTTP `400`), prompt-injection delimiters, plain-text React escaping (zero `dangerouslySetInnerHTML`), and generic error responses with zero stack-trace or upstream error leakage.
+- **Input, Payload & Output Safety**: Zod schema validation on all API inputs and Gemini JSON outputs, `32 KB` JSON body cap (HTTP `413`), malformed JSON handling (HTTP `400`), strictly static Gemini `systemInstruction` strings separated from single-line normalized client metadata inside `<user_household_context>`, `<environmental_context>`, and `<user_message>` delimiters, `Cache-Control: no-store` on manual `refresh=true`, plain-text React escaping (zero `dangerouslySetInnerHTML`), and generic error responses with zero stack-trace or upstream error leakage.
 - **Privacy Minimization**: No accounts or PII collection; optional browser geolocation requires explicit user action and rounds coordinates to 2 decimal places (~1.1 km) without server persistence.

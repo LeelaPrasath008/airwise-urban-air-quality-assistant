@@ -234,7 +234,9 @@ describe('AIRWISE Frontend, E2E User Journey & WCAG 2.2 AA Accessibility', () =>
     await user.click(screen.getByRole('button', { name: /Refresh air quality readings/i }));
     await waitFor(() => {
       expect(
-        fetchSpy.mock.calls.some(([arg]) => String(arg).includes('refresh=true'))
+        fetchSpy.mock.calls.some(
+          ([arg, init]) => String(arg).includes('refresh=true') && init?.cache === 'no-store'
+        )
       ).toBe(true);
     });
 
@@ -700,7 +702,82 @@ describe('AIRWISE Frontend, E2E User Journey & WCAG 2.2 AA Accessibility', () =>
       'page'
     );
   });
+
+  it('maintains valid heading hierarchy and zero axe-core violations after dismissing onboarding, sizes toast dismiss target >= 24px, and respects prefers-reduced-motion in AssistantView', async () => {
+    setupMockFetch();
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+
+    await screen.findByText('268');
+
+    // Before dismissing onboarding: h1 (hero) -> h2 (city) -> h3 (sections) -> h4 (cards)
+    expect((await axe(container)).violations).toEqual([]);
+    const beforeLevels = Array.from(container.querySelectorAll('h1, h2, h3, h4')).map((el) =>
+      Number(el.tagName[1])
+    );
+    expect(beforeLevels[0]).toBe(1);
+    for (let i = 1; i < beforeLevels.length; i++) {
+      expect(beforeLevels[i] - beforeLevels[i - 1]).toBeLessThanOrEqual(1);
+    }
+
+    // Dismiss onboarding hero -> city becomes h1, sections become h2, shortcut cards become h3 (no h1 -> h3 skip)
+    await user.click(screen.getByRole('button', { name: /Hide intro/i }));
+    expect(screen.getByRole('heading', { level: 1, name: /New Delhi, Delhi/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 2, name: /Pollutant concentrations/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 2, name: /24-hour AQI trend/i })
+    ).toBeInTheDocument();
+    const afterLevels = Array.from(container.querySelectorAll('h1, h2, h3, h4')).map((el) =>
+      Number(el.tagName[1])
+    );
+    expect(afterLevels[0]).toBe(1);
+    for (let i = 1; i < afterLevels.length; i++) {
+      expect(afterLevels[i] - afterLevels[i - 1]).toBeLessThanOrEqual(1);
+    }
+    expect((await axe(container)).violations).toEqual([]);
+
+    // Toast dismiss button exposes WCAG 2.2 AA touch target sizing classes (>= 24x24px)
+    await user.click(screen.getByRole('button', { name: /^Community$/i }));
+    const joinBtns = await screen.findAllByRole('button', { name: /^Join pledge$/i });
+    await user.click(joinBtns[0]);
+    const dismissToastBtn = await screen.findByRole('button', { name: /Dismiss notification/i });
+    expect(dismissToastBtn.className).toContain('min-h-[32px]');
+    expect(dismissToastBtn.className).toContain('min-w-[44px]');
+
+    // AssistantView scrollIntoView respects prefers-reduced-motion
+    const originalMatchMedia = window.matchMedia;
+    const scrollSpy = vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(() => {});
+    try {
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: vi.fn().mockReturnValue({ matches: true }),
+      });
+
+      await user.click(screen.getByRole('button', { name: /^AI Assistant$/i }));
+      await screen.findByText(/AIRWISE AI Assistant/i);
+      expect(scrollSpy).toHaveBeenCalledWith({ behavior: 'auto' });
+
+      scrollSpy.mockClear();
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: vi.fn().mockReturnValue({ matches: false }),
+      });
+      await user.click(
+        screen.getByRole('button', { name: /Is it a good idea to exercise outdoors today\?/i })
+      );
+      await screen.findByText(/move strenuous exercise indoors today/i);
+      expect(scrollSpy).toHaveBeenCalledWith({ behavior: 'smooth' });
+    } finally {
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: originalMatchMedia,
+      });
+    }
+  });
 });
+
 
 
 

@@ -61,7 +61,10 @@ export async function fetchAirQuality(
   if (standard) params.set('standard', standard);
   if (bypassCache) params.set('refresh', 'true');
 
-  const res = await fetch(`/api/air-quality?${params.toString()}`, { signal });
+  const res = await fetch(`/api/air-quality?${params.toString()}`, {
+    signal,
+    ...(bypassCache ? { cache: 'no-store' as const } : {}),
+  });
   return parseJsonResponse<AirQualitySnapshot>(res);
 }
 

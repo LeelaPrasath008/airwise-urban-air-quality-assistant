@@ -5,11 +5,13 @@ import type { PollutantReadings, WeatherReadings } from '../shared/types.ts';
 interface PollutantTelemetryCardProps {
   pollutants: PollutantReadings;
   weather: WeatherReadings;
+  headingLevel?: 'h2' | 'h3';
 }
 
 export const PollutantTelemetryCard = memo(function PollutantTelemetryCard({
   pollutants,
   weather,
+  headingLevel: Heading = 'h3',
 }: PollutantTelemetryCardProps) {
   return (
     <section
@@ -17,7 +19,7 @@ export const PollutantTelemetryCard = memo(function PollutantTelemetryCard({
       className="lg:col-span-5 bg-white border border-[#E2E8E5] rounded-xl p-6 flex flex-col justify-between gap-5"
     >
       <div>
-        <h3 className="text-base font-semibold text-[#111C18]">Pollutant concentrations</h3>
+        <Heading className="text-base font-semibold text-[#111C18]">Pollutant concentrations</Heading>
         <p className="text-xs text-[#5E7068] mt-0.5">
           Measured concentrations shown separately from computed AQI index
         </p>
@@ -71,9 +73,9 @@ export const PollutantTelemetryCard = memo(function PollutantTelemetryCard({
       </div>
 
       <div className="pt-4 border-t border-[#E2E8E5]">
-        <h3 className="text-sm font-semibold text-[#111C18] mb-3">
+        <Heading className="text-sm font-semibold text-[#111C18] mb-3">
           Local weather · {weather.conditionLabel}
-        </h3>
+        </Heading>
         <div className="grid grid-cols-3 gap-3">
           <div>
             <div className="flex items-center gap-1 text-xs text-[#5E7068]">

@@ -4,6 +4,7 @@ import { sanitizePlainText } from '../../src/shared/validation.ts';
 import { GEMINI_MODEL, getGeminiClient, withRetry } from './ai/client.ts';
 import { buildRuleBasedChatReply, buildRuleBasedRoutine } from './ai/ruleBasedFallback.ts';
 import {
+  buildChatContextBlock,
   buildChatSystemInstruction,
   buildRoutinePromptPayload,
   buildRoutineSystemInstruction,
@@ -32,14 +33,14 @@ export async function generatePersonalizedRoutine(
     return buildRuleBasedRoutine(input, ROUTINE_UNCONFIGURED_REASON);
   }
 
-  const systemInstruction = buildRoutineSystemInstruction(input);
+  const systemInstruction = buildRoutineSystemInstruction();
   const prompt = buildRoutinePromptPayload(input);
 
   try {
     const response = await withRetry(() =>
       ai.models.generateContent({
         model: GEMINI_MODEL,
-        contents: `Generate a personalized low-emission, exposure-aware daily routine strictly from the untrusted profile data below:\n<user_household_context>\n${prompt}\n</user_household_context>`,
+        contents: `Generate a personalized low-emission, exposure-aware daily routine strictly from the untrusted environmental and household data below:\n<user_household_context>\n${prompt}\n</user_household_context>`,
         config: {
           systemInstruction,
           thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
@@ -88,7 +89,8 @@ export async function generateAssistantReply(input: AssistantChatInput): Promise
     return buildRuleBasedChatReply(input, CHAT_UNCONFIGURED_REASON);
   }
 
-  const systemInstruction = buildChatSystemInstruction(input);
+  const systemInstruction = buildChatSystemInstruction();
+  const contextBlock = buildChatContextBlock(input);
   const conversationContents = [
     ...input.history.slice(-6).map((turn) => ({
       role: turn.role === 'assistant' ? 'model' : 'user',
@@ -96,7 +98,11 @@ export async function generateAssistantReply(input: AssistantChatInput): Promise
     })),
     {
       role: 'user',
-      parts: [{ text: input.message }],
+      parts: [
+        {
+          text: `Untrusted environmental context data:\n<environmental_context>\n${contextBlock}\n</environmental_context>\n\nUser question:\n<user_message>\n${input.message}\n</user_message>`,
+        },
+      ],
     },
   ];
 
