@@ -56,16 +56,17 @@ AIRWISE combines deterministic environmental science with structured server-side
 │   │   ├── types.ts                       # Shared TypeScript domain contracts
 │   │   ├── aqi.ts                         # Exact 6-pollutant Indian CPCB & US EPA AQI breakpoint math
 │   │   ├── sanitize.ts                    # Zero-dependency plain-text sanitizer shared by client & server
-│   │   ├── sustainability.ts              # Emission factors, indoor optimizer, community & impact math
+│   │   ├── sustainability.ts              # Backward-compatible barrel for split sustainability domain modules
+│   │   ├── sustainability/                # Focused factors, alternatives, community, indoor & impact modules
 │   │   └── validation.ts                  # Zod request schemas
 │   ├── services/api.ts                    # Frontend HTTP client with AbortSignal & refresh bypass support
 │   ├── hooks/                             # useLocalStorage, useDebounce, useDialogFocus (WCAG modal focus trap)
 │   └── components/                        # AQIChart, OnboardingHero, PollutantTelemetryCard, modals & 7 modules
 └── tests/
-    ├── unit/domain.test.ts                # 15 domain, AQI breakpoint, cache & validation unit tests
+    ├── unit/domain.test.ts                # 18 domain, AQI breakpoint/boundary, cache & validation unit tests
     ├── unit/accessibility.test.ts         # 2 W3C WCAG 2.2 AA color-contrast unit tests
     ├── integration/api.test.ts            # 15 API, live/fallback, CORS, CSP, proxy & rate-limit integration tests
-    └── frontend/app.test.tsx              # 6 E2E 7-module journey, focus-trap, keyboard & axe-core tests
+    └── frontend/app.test.tsx              # 10 E2E 7-module journey, focus-trap, regression & axe-core tests
 ```
 
 ## 8. Installation Instructions
@@ -108,7 +109,7 @@ See [TESTING.md](./TESTING.md) for the full test matrix.
 # Strict TypeScript check (noUnusedLocals & noUnusedParameters enabled)
 npm run lint
 
-# Run all 38 automated tests (unit, WCAG contrast, API/security integration, E2E & axe-core)
+# Run all 45 automated tests (unit, WCAG contrast, API/security integration, E2E & axe-core)
 npm test
 
 # Verify production bundle
@@ -118,7 +119,7 @@ npm run build
 ## 12. Assumptions & Limitations
 - **Air Quality Data Grid**: Open-Meteo provides model-assimilated CAMS/ECMWF concentrations (~10–40 km resolution), which can differ from hyper-local street-side CPCB/EPA monitoring stations.
 - **Emission Factor Estimates**: Household CO₂e savings in *Sustainable Choices*, *Community Impact*, and *My Impact* are modeled estimates derived from published DEFRA, IEA, and CEA India average factors—not metered carbon accounting—and are explicitly labeled as estimates throughout the UI.
-- **HEPA CADR Sizing**: Indoor CADR estimates assume an 8 ft (2.4 m) ceiling height targeting ~4.8 air changes per hour (AHAM/EPA guidance) and adjust conservatively for higher outdoor AQI.
+- **HEPA CADR Sizing**: Indoor CADR estimates assume a 2.6 m (~8.5 ft) ceiling height targeting ~4.8 air changes per hour (AHAM/EPA guidance) and adjust conservatively for higher outdoor AQI.
 - **Local Privacy Storage**: Preferences, pledges, and logged actions persist in browser `localStorage` without server accounts; clearing site storage resets local records and data does not sync across devices.
 - **Single-Instance Caching & Rate Limiting**: `BoundedTTLCache` and `express-rate-limit` use in-memory stores suitable for single-instance deployment; horizontally scaled multi-replica production deployments should use a shared Redis store.
 - **Non-Medical Disclaimer**: AIRWISE offers environmental and exposure-reduction guidance only and does not replace professional medical advice or official public-health emergency directives.

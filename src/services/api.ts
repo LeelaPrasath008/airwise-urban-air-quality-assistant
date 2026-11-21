@@ -1,7 +1,9 @@
+import { formatLocationLabel } from '../shared/aqi.ts';
 import type {
   AirQualitySnapshot,
   AQIStandard,
   DailyRoutinePlan,
+  EnvironmentalContext,
   GeoLocation,
   LifestyleProfile,
 } from '../shared/types.ts';
@@ -63,6 +65,20 @@ export async function fetchAirQuality(
   return parseJsonResponse<AirQualitySnapshot>(res);
 }
 
+function buildEnvironmentalContext(snapshot: AirQualitySnapshot): EnvironmentalContext {
+  return {
+    locationName: formatLocationLabel(snapshot.location),
+    standard: snapshot.standard,
+    aqi: snapshot.aqi,
+    categoryLabel: snapshot.category.label,
+    pm25: snapshot.pollutants.pm25,
+    pm10: snapshot.pollutants.pm10,
+    temperatureC: snapshot.weather.temperatureC,
+    humidityPercent: snapshot.weather.humidityPercent,
+    weatherCondition: snapshot.weather.conditionLabel,
+  };
+}
+
 export async function requestDailyRoutine(
   snapshot: AirQualitySnapshot,
   profile: LifestyleProfile,
@@ -73,15 +89,7 @@ export async function requestDailyRoutine(
     headers: { 'Content-Type': 'application/json' },
     signal,
     body: JSON.stringify({
-      locationName: `${snapshot.location.name}, ${snapshot.location.country}`,
-      standard: snapshot.standard,
-      aqi: snapshot.aqi,
-      categoryLabel: snapshot.category.label,
-      pm25: snapshot.pollutants.pm25,
-      pm10: snapshot.pollutants.pm10,
-      temperatureC: snapshot.weather.temperatureC,
-      humidityPercent: snapshot.weather.humidityPercent,
-      weatherCondition: snapshot.weather.conditionLabel,
+      ...buildEnvironmentalContext(snapshot),
       profile,
     }),
   });
@@ -107,15 +115,7 @@ export async function sendAssistantMessage(params: {
       message,
       history,
       context: {
-        locationName: `${snapshot.location.name}, ${snapshot.location.country}`,
-        standard: snapshot.standard,
-        aqi: snapshot.aqi,
-        categoryLabel: snapshot.category.label,
-        pm25: snapshot.pollutants.pm25,
-        pm10: snapshot.pollutants.pm10,
-        temperatureC: snapshot.weather.temperatureC,
-        humidityPercent: snapshot.weather.humidityPercent,
-        weatherCondition: snapshot.weather.conditionLabel,
+        ...buildEnvironmentalContext(snapshot),
         isDemonstrationData: snapshot.isDemonstrationData,
       },
     }),

@@ -1,7 +1,10 @@
 import { z } from 'zod';
 import { sanitizePlainText } from './sanitize.ts';
+import { ACTION_CATEGORIES } from './types.ts';
 
 export { sanitizePlainText };
+
+export const ActionCategorySchema = z.enum(ACTION_CATEGORIES);
 
 export const LocationQuerySchema = z.object({
   q: z
@@ -76,7 +79,7 @@ export const LifestyleProfileSchema = z.object({
     .transform((s) => sanitizePlainText(s, 300)),
 });
 
-export const RoutineRequestSchema = z.object({
+export const EnvironmentalContextSchema = z.object({
   locationName: z
     .string()
     .trim()
@@ -100,6 +103,9 @@ export const RoutineRequestSchema = z.object({
     .trim()
     .max(80)
     .transform((s) => sanitizePlainText(s, 80)),
+});
+
+export const RoutineRequestSchema = EnvironmentalContextSchema.extend({
   profile: LifestyleProfileSchema,
 });
 
@@ -120,29 +126,13 @@ export const ChatRequestSchema = z.object({
     .max(10)
     .optional()
     .default([]),
-  context: z.object({
-    locationName: z.string().trim().min(1).max(120).transform((s) => sanitizePlainText(s, 120)),
-    standard: z.enum(['INDIA_CPCB', 'US_EPA']),
-    aqi: z.number().min(0).max(500),
-    categoryLabel: z.string().trim().min(1).max(60).transform((s) => sanitizePlainText(s, 60)),
-    pm25: z.number().min(0).max(1500),
-    pm10: z.number().min(0).max(2000),
-    temperatureC: z.number().min(-60).max(65),
-    humidityPercent: z.number().min(0).max(100),
-    weatherCondition: z.string().trim().max(80).transform((s) => sanitizePlainText(s, 80)),
+  context: EnvironmentalContextSchema.extend({
     isDemonstrationData: z.boolean().optional().default(false),
   }),
 });
 
 export const TrackedActionInputSchema = z.object({
-  category: z.enum([
-    'public_transit',
-    'active_travel',
-    'energy_saving',
-    'waste_reduction',
-    'reusable_swap',
-    'clean_indoor_air',
-  ]),
+  category: ActionCategorySchema,
   title: z
     .string()
     .trim()

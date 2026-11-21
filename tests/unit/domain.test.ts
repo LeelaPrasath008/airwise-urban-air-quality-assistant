@@ -4,15 +4,24 @@ import {
   calculateAQI,
   classifyAQI,
   findBestVentilationWindow,
+  formatLocationLabel,
+  getAQIScaleLegend,
   getDefaultStandardForCountry,
   isValidAQIValue,
   weatherCodeToLabel,
 } from '../../src/shared/aqi.ts';
 import {
+  ACTION_ESTIMATE_FACTORS,
+  COMMUNITY_INITIATIVES,
   computeImpactSummary,
   generateIndoorRecommendations,
   SUSTAINABLE_ALTERNATIVES,
 } from '../../src/shared/sustainability.ts';
+import { ACTION_ESTIMATE_FACTORS as DIRECT_FACTORS } from '../../src/shared/sustainability/factors.ts';
+import { SUSTAINABLE_ALTERNATIVES as DIRECT_ALTERNATIVES } from '../../src/shared/sustainability/alternatives.ts';
+import { COMMUNITY_INITIATIVES as DIRECT_COMMUNITY } from '../../src/shared/sustainability/community.ts';
+import { generateIndoorRecommendations as directGenerateIndoor } from '../../src/shared/sustainability/indoor.ts';
+import { computeImpactSummary as directComputeImpact } from '../../src/shared/sustainability/impact.ts';
 import {
   AirQualityQuerySchema,
   ChatRequestSchema,
@@ -69,9 +78,81 @@ describe('AQI Calculation & Classification (Indian CPCB & US EPA)', () => {
   it('classifies US EPA AQI categories and selects default standard by country', () => {
     expect(getDefaultStandardForCountry('IN')).toBe('INDIA_CPCB');
     expect(getDefaultStandardForCountry('US')).toBe('US_EPA');
+    expect(formatLocationLabel({ name: 'New Delhi', country: 'India' })).toBe('New Delhi, India');
     expect(classifyAQI(42, 'US_EPA').label).toBe('Good');
     expect(classifyAQI(125, 'US_EPA').label).toBe('Unhealthy for Sensitive Groups');
     expect(classifyAQI(340, 'US_EPA').label).toBe('Hazardous');
+  });
+
+  it('enforces exact Indian CPCB and US EPA classification boundaries and invalid value fallbacks', () => {
+    const cpcbBoundaries: Array<[number, string, number]> = [
+      [-10, 'Good', 1],
+      [0, 'Good', 1],
+      [50, 'Good', 1],
+      [51, 'Satisfactory', 2],
+      [100, 'Satisfactory', 2],
+      [101, 'Moderate', 3],
+      [200, 'Moderate', 3],
+      [201, 'Poor', 4],
+      [300, 'Poor', 4],
+      [301, 'Very Poor', 5],
+      [400, 'Very Poor', 5],
+      [401, 'Severe', 6],
+      [500, 'Severe', 6],
+      [750, 'Severe', 6],
+    ];
+    for (const [aqi, expectedLabel, expectedSeverity] of cpcbBoundaries) {
+      const cat = classifyAQI(aqi, 'INDIA_CPCB');
+      expect(cat.label, `CPCB AQI ${aqi}`).toBe(expectedLabel);
+      expect(cat.severityLevel, `CPCB severity ${aqi}`).toBe(expectedSeverity);
+    }
+
+    const usEpaBoundaries: Array<[number, string, number]> = [
+      [-5, 'Good', 1],
+      [0, 'Good', 1],
+      [50, 'Good', 1],
+      [51, 'Moderate', 2],
+      [100, 'Moderate', 2],
+      [101, 'Unhealthy for Sensitive Groups', 3],
+      [150, 'Unhealthy for Sensitive Groups', 3],
+      [151, 'Unhealthy', 4],
+      [200, 'Unhealthy', 4],
+      [201, 'Very Unhealthy', 5],
+      [300, 'Very Unhealthy', 5],
+      [301, 'Hazardous', 6],
+      [500, 'Hazardous', 6],
+      [750, 'Hazardous', 6],
+    ];
+    for (const [aqi, expectedLabel, expectedSeverity] of usEpaBoundaries) {
+      const cat = classifyAQI(aqi, 'US_EPA');
+      expect(cat.label, `US EPA AQI ${aqi}`).toBe(expectedLabel);
+      expect(cat.severityLevel, `US EPA severity ${aqi}`).toBe(expectedSeverity);
+    }
+
+    expect(classifyAQI(Number.NaN, 'US_EPA').label).toBe('Good');
+    expect(classifyAQI(Number.POSITIVE_INFINITY, 'INDIA_CPCB').label).toBe('Good');
+  });
+
+  it('derives 6-band AQI scale legends for CPCB and US EPA directly from shared band definitions', () => {
+    const cpcbLegend = getAQIScaleLegend('INDIA_CPCB');
+    expect(cpcbLegend).toEqual([
+      { label: 'Good', range: '0–50', color: '#15803D' },
+      { label: 'Satisfactory', range: '51–100', color: '#4D7C0F' },
+      { label: 'Moderate', range: '101–200', color: '#CA8A04' },
+      { label: 'Poor', range: '201–300', color: '#EA580C' },
+      { label: 'Very Poor', range: '301–400', color: '#DC2626' },
+      { label: 'Severe', range: '401–500', color: '#991B1B' },
+    ]);
+
+    const usEpaLegend = getAQIScaleLegend('US_EPA');
+    expect(usEpaLegend).toEqual([
+      { label: 'Good', range: '0–50', color: '#15803D' },
+      { label: 'Moderate', range: '51–100', color: '#CA8A04' },
+      { label: 'Sensitive', range: '101–150', color: '#EA580C' },
+      { label: 'Unhealthy', range: '151–200', color: '#DC2626' },
+      { label: 'Very Unhealthy', range: '201–300', color: '#7E22CE' },
+      { label: 'Hazardous', range: '301–500', color: '#881337' },
+    ]);
   });
 
   it('validates AQI numeric boundaries cleanly', () => {
@@ -231,6 +312,14 @@ describe('Sustainability Calculations & Alternatives Transparency', () => {
     expect(summary.milestones.find((m) => m.id === 'ms-first')?.achieved).toBe(true);
     expect(summary.milestones.find((m) => m.id === 'ms-diverse')?.achieved).toBe(true);
     expect(summary.milestones.find((m) => m.id === 'ms-co2-25')?.achieved).toBe(false);
+  });
+
+  it('preserves backward-compatible barrel exports across all split sustainability modules', () => {
+    expect(ACTION_ESTIMATE_FACTORS).toBe(DIRECT_FACTORS);
+    expect(SUSTAINABLE_ALTERNATIVES).toBe(DIRECT_ALTERNATIVES);
+    expect(COMMUNITY_INITIATIVES).toBe(DIRECT_COMMUNITY);
+    expect(generateIndoorRecommendations).toBe(directGenerateIndoor);
+    expect(computeImpactSummary).toBe(directComputeImpact);
   });
 });
 

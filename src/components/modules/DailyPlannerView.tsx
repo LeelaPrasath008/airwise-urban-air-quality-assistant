@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { Check, RefreshCw, Sparkles, Sun, Sunrise, Sunset } from 'lucide-react';
 import { requestDailyRoutine } from '../../services/api.ts';
+import { formatLocationLabel } from '../../shared/aqi.ts';
 import type {
   ActionCategory,
   AirQualitySnapshot,
@@ -41,7 +42,7 @@ export function DailyPlannerView({
   const isRoutineStale = Boolean(
     routine &&
       snapshot &&
-      (routine.locationName !== snapshot.location.name ||
+      (routine.locationName !== formatLocationLabel(snapshot.location) ||
         Math.abs(routine.aqiAtGeneration - snapshot.aqi) >= 30)
   );
 
@@ -68,6 +69,7 @@ export function DailyPlannerView({
       const generated = await requestDailyRoutine(snapshot, formState, controller.signal);
       if (!controller.signal.aborted) {
         onUpdateRoutine(generated);
+        setLoggedIds({});
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;

@@ -15,11 +15,12 @@ npm run lint
 npm run build
 ```
 
-## Test Coverage Breakdown (38 Automated Tests across 4 Suites)
+## Test Coverage Breakdown (45 Automated Tests across 4 Suites)
 
-1. **Domain & Cache Unit Tests (`tests/unit/domain.test.ts` — 15 tests)**
+1. **Domain & Cache Unit Tests (`tests/unit/domain.test.ts` — 18 tests)**
    - Indian National AQI (CPCB) sub-index breakpoint calculations across all 6 bands (Good, Satisfactory, Moderate, Poor, Very Poor, Severe) and all 6 pollutants (`PM2.5`, `PM10`, `NO2`, `O3`, `SO2`, `CO`).
-   - Gap, zero, negative, `NaN`, and extreme (`>500`) AQI concentration edge cases.
+   - Exact threshold boundary checks for all 6 CPCB and 6 US EPA categories, gap/zero/negative/`NaN`/`Infinity`/`>500` edge cases, and shared AQI scale legend derivation.
+   - Backward-compatible barrel verification across the split `src/shared/sustainability/*` modules.
    - US EPA AQI breakpoint calculations and country-default selection.
    - WMO weather-code mapping and cleanest forecast ventilation window resolution.
    - `BoundedTTLCache` max-entry eviction and TTL expiration behavior.
@@ -43,12 +44,12 @@ npm run build
    - `/api/ai/chat` contextual response, XSS script-tag sanitization, and prompt-injection resilience without leaking secrets or raw error traces.
    - Malformed JSON (`400`), oversized payload rejection (`413`), rate limiting (`429`), and unknown `/api/*` route JSON `404`.
 
-4. **Frontend, End-to-End Journey & WCAG 2.2 AA Accessibility Tests (`tests/frontend/app.test.tsx` — 6 tests)**
+4. **Frontend, End-to-End Journey & WCAG 2.2 AA Accessibility Tests (`tests/frontend/app.test.tsx` — 10 tests)**
    - Full end-to-end journey across all 7 modules: onboarding & live AQI dashboard (with CPCB ↔ US EPA switcher & `refresh=true`) -> location selector modal -> Daily Planner routine generation -> Indoor Air Optimizer -> Sustainable Choices logging -> AIRWISE AI chat -> Community pledge -> Personal Impact CRUD (log + delete).
    - WCAG 2.2 AA modal focus trapping (`Tab` cycling) and `Escape` focus restoration back to triggering controls.
    - Network error fallback UI and mobile navigation drawer toggling.
    - Automated `axe-core` WCAG 2.2 AA audits across all 7 modules and open Location Selector / Alert Preferences modals verifying zero violations.
-   - `AQIChart` keyboard range scrubber updates, debounced city search, and graceful browser geolocation denial error handling.
-   - Stale-routine notice on city/AQI shift and accessible form validation `aria-invalid`/`aria-describedby` bindings.
+   - `AQIChart` keyboard range scrubber updates, location-switch scrubber reset, debounced city search with aborted-request loading guard, and graceful browser geolocation denial error handling.
+   - Fresh vs. stale-routine notice checks, logged-button reset on routine regeneration, React `<StrictMode>` community pledge toggles, and accessible form validation `aria-invalid`/`aria-describedby` bindings.
 
 

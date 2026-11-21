@@ -78,6 +78,18 @@ export interface AirQualitySnapshot {
   disclaimer: string;
 }
 
+export interface EnvironmentalContext {
+  locationName: string;
+  standard: AQIStandard;
+  aqi: number;
+  categoryLabel: string;
+  pm25: number;
+  pm10: number;
+  temperatureC: number;
+  humidityPercent: number;
+  weatherCondition: string;
+}
+
 export interface LifestyleProfile {
   occupation: string;
   typicalCommute: 'car_solo' | 'carpool' | 'public_transit' | 'two_wheeler' | 'walk_cycle' | 'remote';
@@ -133,7 +145,6 @@ export interface IndoorRecommendation {
   action: string;
   rationale: string;
   implementationSteps: string[];
-  ventilationNote?: string;
 }
 
 export type AlternativeDomain =
@@ -168,13 +179,16 @@ export interface ChatTurn {
   fallbackNotice?: string;
 }
 
-export type ActionCategory =
-  | 'public_transit'
-  | 'active_travel'
-  | 'energy_saving'
-  | 'waste_reduction'
-  | 'reusable_swap'
-  | 'clean_indoor_air';
+export const ACTION_CATEGORIES = [
+  'public_transit',
+  'active_travel',
+  'energy_saving',
+  'waste_reduction',
+  'reusable_swap',
+  'clean_indoor_air',
+] as const;
+
+export type ActionCategory = (typeof ACTION_CATEGORIES)[number];
 
 export interface TrackedAction {
   id: string;

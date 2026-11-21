@@ -1,7 +1,6 @@
 interface CacheEntry<T> {
   value: T;
   expiresAt: number;
-  createdAt: number;
 }
 
 /**
@@ -33,11 +32,9 @@ export class BoundedTTLCache<T> {
         this.store.delete(firstKey);
       }
     }
-    const now = Date.now();
     this.store.set(key, {
       value,
-      createdAt: now,
-      expiresAt: now + ttlMs,
+      expiresAt: Date.now() + ttlMs,
     });
   }
 

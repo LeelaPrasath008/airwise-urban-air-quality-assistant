@@ -13,6 +13,12 @@ interface LocationSelectorModalProps {
   onSelectLocation: (loc: GeoLocation) => void;
 }
 
+export function formatCoordinateRegion(lat: number, lon: number): string {
+  const latDir = lat >= 0 ? 'N' : 'S';
+  const lonDir = lon >= 0 ? 'E' : 'W';
+  return `${Math.abs(lat).toFixed(2)}°${latDir}, ${Math.abs(lon).toFixed(2)}°${lonDir}`;
+}
+
 export function LocationSelectorModal({
   open,
   onClose,
@@ -30,13 +36,37 @@ export function LocationSelectorModal({
   const [geoMessage, setGeoMessage] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const isOpenRef = useRef(open);
+  const geoRequestIdRef = useRef(0);
+  const queryRef = useRef(query);
 
   useDialogFocus(open, dialogRef, onClose, inputRef);
 
   useEffect(() => {
+    queryRef.current = query;
+  }, [query]);
+
+  useEffect(() => {
+    isOpenRef.current = open;
+    if (!open) {
+      geoRequestIdRef.current += 1;
+      setQuery('');
+      setResults([]);
+      setSourceLabel('');
+      setSearching(false);
+      setSearchError(null);
+      setGeoStatus('idle');
+      setGeoMessage(null);
+    }
+    return () => {
+      isOpenRef.current = false;
+    };
+  }, [open]);
+
+  useEffect(() => {
     if (!open) return;
     const trimmed = debouncedQuery.trim();
-    if (trimmed.length < 2) {
+    if (trimmed.length < 2 || queryRef.current.trim().length < 2) {
       setResults([]);
       setSourceLabel('');
       setSearchError(null);
@@ -56,7 +86,11 @@ export function LocationSelectorModal({
         if (err instanceof DOMException && err.name === 'AbortError') return;
         setSearchError(err instanceof Error ? err.message : 'Unable to search cities right now.');
       })
-      .finally(() => setSearching(false));
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setSearching(false);
+        }
+      });
 
     return () => controller.abort();
   }, [debouncedQuery, open]);
@@ -70,11 +104,14 @@ export function LocationSelectorModal({
       return;
     }
 
+    const requestId = ++geoRequestIdRef.current;
     setGeoStatus('requesting');
     setGeoMessage('Waiting for your browser location permission...');
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        if (!isOpenRef.current || geoRequestIdRef.current !== requestId) return;
+
         // Round to 2 decimal places (~1.1 km) to avoid collecting precise street-level coordinates
         const lat = Math.round(position.coords.latitude * 100) / 100;
         const lon = Math.round(position.coords.longitude * 100) / 100;
@@ -83,7 +120,7 @@ export function LocationSelectorModal({
         onSelectLocation({
           id: `geo-${lat}-${lon}`,
           name: 'Current Area',
-          region: `${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E`,
+          region: formatCoordinateRegion(lat, lon),
           country: isRoughlyIndia ? 'India' : 'Local Region',
           countryCode: isRoughlyIndia ? 'IN' : 'US',
           latitude: lat,
@@ -94,6 +131,8 @@ export function LocationSelectorModal({
         onClose();
       },
       (err) => {
+        if (!isOpenRef.current || geoRequestIdRef.current !== requestId) return;
+
         setGeoStatus('error');
         if (err.code === err.PERMISSION_DENIED) {
           setGeoMessage('Location permission was declined. You can search manually for any city below.');

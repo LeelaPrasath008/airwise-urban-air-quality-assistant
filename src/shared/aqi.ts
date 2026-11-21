@@ -150,87 +150,105 @@ export function calculateAQI(
   };
 }
 
-export function classifyAQI(aqi: number, standard: AQIStandard): AQICategoryMeta {
-  const safeAqi = Number.isFinite(aqi) ? Math.max(0, Math.round(aqi)) : 0;
+interface AQICategoryBand {
+  readonly maxAqi: number;
+  readonly legendLabel?: string;
+  readonly legendRange?: string;
+  readonly meta: AQICategoryMeta;
+}
 
-  if (standard === 'INDIA_CPCB') {
-    if (safeAqi <= 50) {
-      return {
-        key: 'good',
-        label: 'Good',
-        rangeLabel: '0–50',
-        severityLevel: 1,
-        textColorClass: 'text-[#14532D]',
-        bgTintClass: 'bg-[#ECFDF3]',
-        borderTintClass: 'border-[#BBF7D0]',
-        barColorHex: '#15803D',
-        healthSummary: 'Minimal impact for most households.',
-        outdoorGuidance: 'Favorable conditions for walking, cycling, and outdoor family activities.',
-        ventilationAdvice: 'Safe to open windows for cross-ventilation during cooler or low-traffic hours.',
-      };
-    }
-    if (safeAqi <= 100) {
-      return {
-        key: 'satisfactory',
-        label: 'Satisfactory',
-        rangeLabel: '51–100',
-        severityLevel: 2,
-        textColorClass: 'text-[#1E4620]',
-        bgTintClass: 'bg-[#F0F9F1]',
-        borderTintClass: 'border-[#CBE8CE]',
-        barColorHex: '#4D7C0F',
-        healthSummary: 'Minor breathing discomfort possible for unusually sensitive people.',
-        outdoorGuidance: 'Generally acceptable for outdoor activity; sensitive individuals should monitor symptoms.',
-        ventilationAdvice: 'Brief cross-ventilation is fine; avoid ventilating directly facing busy arterial roads during rush hour.',
-      };
-    }
-    if (safeAqi <= 200) {
-      return {
-        key: 'moderate',
-        label: 'Moderate',
-        rangeLabel: '101–200',
-        severityLevel: 3,
-        textColorClass: 'text-[#854D0E]',
-        bgTintClass: 'bg-[#FEFCE8]',
-        borderTintClass: 'border-[#FDE047]',
-        barColorHex: '#CA8A04',
-        healthSummary: 'Breathing discomfort possible for people with lung or heart conditions, children, and older adults.',
-        outdoorGuidance: 'Reduce prolonged or vigorous outdoor exertion, especially near heavy traffic.',
-        ventilationAdvice: 'Limit open windows to the lowest-pollution midday window; run kitchen exhaust while cooking.',
-      };
-    }
-    if (safeAqi <= 300) {
-      return {
-        key: 'poor',
-        label: 'Poor',
-        rangeLabel: '201–300',
-        severityLevel: 4,
-        textColorClass: 'text-[#9A3412]',
-        bgTintClass: 'bg-[#FFF7ED]',
-        borderTintClass: 'border-[#FDBA74]',
-        barColorHex: '#EA580C',
-        healthSummary: 'Breathing discomfort likely on prolonged exposure for most people, and heightened risk for sensitive groups.',
-        outdoorGuidance: 'Shift exercise indoors. Consider a well-fitting N95/FFP2 respirator if prolonged outdoor commuting is unavoidable.',
-        ventilationAdvice: 'Keep windows mostly closed; outdoor ventilation can raise indoor PM2.5. Use HEPA filtration if available.',
-      };
-    }
-    if (safeAqi <= 400) {
-      return {
-        key: 'very_poor',
-        label: 'Very Poor',
-        rangeLabel: '301–400',
-        severityLevel: 5,
-        textColorClass: 'text-[#991B1B]',
-        bgTintClass: 'bg-[#FEF2F2]',
-        borderTintClass: 'border-[#FCA5A5]',
-        barColorHex: '#DC2626',
-        healthSummary: 'Respiratory illness risk increases on prolonged exposure. Pronounced impact on people with lung or heart disease.',
-        outdoorGuidance: 'Avoid strenuous outdoor activity. Keep children, pregnant individuals, and older adults indoors as much as practical.',
-        ventilationAdvice: 'Keep windows and exterior doors closed. Run HEPA air purification continuously and avoid indoor smoke sources.',
-        officialAdvisoryNote: 'Follow local municipal GRAP / CPCB advisories and consult a clinician if respiratory symptoms occur.',
-      };
-    }
-    return {
+export interface AQIScaleLegendBand {
+  readonly label: string;
+  readonly range: string;
+  readonly color: string;
+}
+
+const INDIA_CPCB_BANDS: readonly AQICategoryBand[] = [
+  {
+    maxAqi: 50,
+    meta: {
+      key: 'good',
+      label: 'Good',
+      rangeLabel: '0–50',
+      severityLevel: 1,
+      textColorClass: 'text-[#14532D]',
+      bgTintClass: 'bg-[#ECFDF3]',
+      borderTintClass: 'border-[#BBF7D0]',
+      barColorHex: '#15803D',
+      healthSummary: 'Minimal impact for most households.',
+      outdoorGuidance: 'Favorable conditions for walking, cycling, and outdoor family activities.',
+      ventilationAdvice: 'Safe to open windows for cross-ventilation during cooler or low-traffic hours.',
+    },
+  },
+  {
+    maxAqi: 100,
+    meta: {
+      key: 'satisfactory',
+      label: 'Satisfactory',
+      rangeLabel: '51–100',
+      severityLevel: 2,
+      textColorClass: 'text-[#1E4620]',
+      bgTintClass: 'bg-[#F0F9F1]',
+      borderTintClass: 'border-[#CBE8CE]',
+      barColorHex: '#4D7C0F',
+      healthSummary: 'Minor breathing discomfort possible for unusually sensitive people.',
+      outdoorGuidance: 'Generally acceptable for outdoor activity; sensitive individuals should monitor symptoms.',
+      ventilationAdvice: 'Brief cross-ventilation is fine; avoid ventilating directly facing busy arterial roads during rush hour.',
+    },
+  },
+  {
+    maxAqi: 200,
+    meta: {
+      key: 'moderate',
+      label: 'Moderate',
+      rangeLabel: '101–200',
+      severityLevel: 3,
+      textColorClass: 'text-[#854D0E]',
+      bgTintClass: 'bg-[#FEFCE8]',
+      borderTintClass: 'border-[#FDE047]',
+      barColorHex: '#CA8A04',
+      healthSummary: 'Breathing discomfort possible for people with lung or heart conditions, children, and older adults.',
+      outdoorGuidance: 'Reduce prolonged or vigorous outdoor exertion, especially near heavy traffic.',
+      ventilationAdvice: 'Limit open windows to the lowest-pollution midday window; run kitchen exhaust while cooking.',
+    },
+  },
+  {
+    maxAqi: 300,
+    meta: {
+      key: 'poor',
+      label: 'Poor',
+      rangeLabel: '201–300',
+      severityLevel: 4,
+      textColorClass: 'text-[#9A3412]',
+      bgTintClass: 'bg-[#FFF7ED]',
+      borderTintClass: 'border-[#FDBA74]',
+      barColorHex: '#EA580C',
+      healthSummary: 'Breathing discomfort likely on prolonged exposure for most people, and heightened risk for sensitive groups.',
+      outdoorGuidance: 'Shift exercise indoors. Consider a well-fitting N95/FFP2 respirator if prolonged outdoor commuting is unavoidable.',
+      ventilationAdvice: 'Keep windows mostly closed; outdoor ventilation can raise indoor PM2.5. Use HEPA filtration if available.',
+    },
+  },
+  {
+    maxAqi: 400,
+    meta: {
+      key: 'very_poor',
+      label: 'Very Poor',
+      rangeLabel: '301–400',
+      severityLevel: 5,
+      textColorClass: 'text-[#991B1B]',
+      bgTintClass: 'bg-[#FEF2F2]',
+      borderTintClass: 'border-[#FCA5A5]',
+      barColorHex: '#DC2626',
+      healthSummary: 'Respiratory illness risk increases on prolonged exposure. Pronounced impact on people with lung or heart disease.',
+      outdoorGuidance: 'Avoid strenuous outdoor activity. Keep children, pregnant individuals, and older adults indoors as much as practical.',
+      ventilationAdvice: 'Keep windows and exterior doors closed. Run HEPA air purification continuously and avoid indoor smoke sources.',
+      officialAdvisoryNote: 'Follow local municipal GRAP / CPCB advisories and consult a clinician if respiratory symptoms occur.',
+    },
+  },
+  {
+    maxAqi: Number.POSITIVE_INFINITY,
+    legendRange: '401–500',
+    meta: {
       key: 'severe',
       label: 'Severe',
       rangeLabel: '401–500+',
@@ -243,12 +261,14 @@ export function classifyAQI(aqi: number, standard: AQIStandard): AQICategoryMeta
       outdoorGuidance: 'Avoid non-essential outdoor exposure. Prioritize official public-health and school/work advisories.',
       ventilationAdvice: 'Do NOT open windows for ventilation. Seal obvious door/window draft gaps and run HEPA filtration on high.',
       officialAdvisoryNote: 'Severe pollution event: Follow official CPCB, state pollution board, and public-health emergency directives immediately.',
-    };
-  }
+    },
+  },
+];
 
-  // US EPA AQI Standard
-  if (safeAqi <= 50) {
-    return {
+const US_EPA_BANDS: readonly AQICategoryBand[] = [
+  {
+    maxAqi: 50,
+    meta: {
       key: 'good',
       label: 'Good',
       rangeLabel: '0–50',
@@ -260,10 +280,11 @@ export function classifyAQI(aqi: number, standard: AQIStandard): AQICategoryMeta
       healthSummary: 'Air quality is satisfactory with little or no risk from air pollution.',
       outdoorGuidance: 'Ideal conditions for outdoor exercise, walking, and cycling.',
       ventilationAdvice: 'Favorable to open windows for fresh air circulation.',
-    };
-  }
-  if (safeAqi <= 100) {
-    return {
+    },
+  },
+  {
+    maxAqi: 100,
+    meta: {
       key: 'moderate',
       label: 'Moderate',
       rangeLabel: '51–100',
@@ -275,10 +296,12 @@ export function classifyAQI(aqi: number, standard: AQIStandard): AQICategoryMeta
       healthSummary: 'Acceptable air quality; unusually sensitive individuals may experience mild symptoms.',
       outdoorGuidance: 'Outdoor activity is generally fine; unusually sensitive people may shorten intense workouts.',
       ventilationAdvice: 'Short ventilation windows are acceptable away from rush-hour traffic.',
-    };
-  }
-  if (safeAqi <= 150) {
-    return {
+    },
+  },
+  {
+    maxAqi: 150,
+    legendLabel: 'Sensitive',
+    meta: {
       key: 'usg',
       label: 'Unhealthy for Sensitive Groups',
       rangeLabel: '101–150',
@@ -290,10 +313,11 @@ export function classifyAQI(aqi: number, standard: AQIStandard): AQICategoryMeta
       healthSummary: 'Sensitive groups (children, older adults, asthma/heart conditions) may experience health effects.',
       outdoorGuidance: 'Sensitive groups should reduce prolonged or heavy outdoor exertion.',
       ventilationAdvice: 'Limit open windows when PM2.5 peaks; run kitchen exhaust fans while cooking.',
-    };
-  }
-  if (safeAqi <= 200) {
-    return {
+    },
+  },
+  {
+    maxAqi: 200,
+    meta: {
       key: 'unhealthy',
       label: 'Unhealthy',
       rangeLabel: '151–200',
@@ -305,10 +329,11 @@ export function classifyAQI(aqi: number, standard: AQIStandard): AQICategoryMeta
       healthSummary: 'Everyone may begin to experience health effects; sensitive groups face more serious impacts.',
       outdoorGuidance: 'Move vigorous exercise indoors and shorten outdoor time.',
       ventilationAdvice: 'Keep windows closed and use HEPA filtration indoors where available.',
-    };
-  }
-  if (safeAqi <= 300) {
-    return {
+    },
+  },
+  {
+    maxAqi: 300,
+    meta: {
       key: 'very_unhealthy',
       label: 'Very Unhealthy',
       rangeLabel: '201–300',
@@ -321,26 +346,62 @@ export function classifyAQI(aqi: number, standard: AQIStandard): AQICategoryMeta
       outdoorGuidance: 'Avoid strenuous outdoor activity; sensitive groups should remain indoors.',
       ventilationAdvice: 'Keep windows sealed closed and operate HEPA air purifiers continuously.',
       officialAdvisoryNote: 'Monitor official AirNow and local public-health agency advisories.',
-    };
-  }
-  return {
-    key: 'hazardous',
-    label: 'Hazardous',
-    rangeLabel: '301–500',
-    severityLevel: 6,
-    textColorClass: 'text-[#7F1D1D]',
-    bgTintClass: 'bg-[#FDF2F4]',
-    borderTintClass: 'border-[#F87171]',
-    barColorHex: '#881337',
-    healthSummary: 'Health warning of emergency conditions: everyone is more likely to be affected.',
-    outdoorGuidance: 'Stay indoors and avoid all outdoor physical activity.',
-    ventilationAdvice: 'Do NOT open windows. Create a clean indoor room with HEPA filtration.',
-    officialAdvisoryNote: 'Emergency pollution levels: Follow official local health authority instructions.',
-  };
+    },
+  },
+  {
+    maxAqi: Number.POSITIVE_INFINITY,
+    meta: {
+      key: 'hazardous',
+      label: 'Hazardous',
+      rangeLabel: '301–500',
+      severityLevel: 6,
+      textColorClass: 'text-[#7F1D1D]',
+      bgTintClass: 'bg-[#FDF2F4]',
+      borderTintClass: 'border-[#F87171]',
+      barColorHex: '#881337',
+      healthSummary: 'Health warning of emergency conditions: everyone is more likely to be affected.',
+      outdoorGuidance: 'Stay indoors and avoid all outdoor physical activity.',
+      ventilationAdvice: 'Do NOT open windows. Create a clean indoor room with HEPA filtration.',
+      officialAdvisoryNote: 'Emergency pollution levels: Follow official local health authority instructions.',
+    },
+  },
+];
+
+const AQI_BANDS_BY_STANDARD: Record<AQIStandard, readonly AQICategoryBand[]> = {
+  INDIA_CPCB: INDIA_CPCB_BANDS,
+  US_EPA: US_EPA_BANDS,
+};
+
+function toScaleLegend(bands: readonly AQICategoryBand[]): readonly AQIScaleLegendBand[] {
+  return bands.map((band) => ({
+    label: band.legendLabel ?? band.meta.label,
+    range: band.legendRange ?? band.meta.rangeLabel,
+    color: band.meta.barColorHex,
+  }));
+}
+
+const AQI_SCALE_LEGENDS: Record<AQIStandard, readonly AQIScaleLegendBand[]> = {
+  INDIA_CPCB: toScaleLegend(INDIA_CPCB_BANDS),
+  US_EPA: toScaleLegend(US_EPA_BANDS),
+};
+
+export function classifyAQI(aqi: number, standard: AQIStandard): AQICategoryMeta {
+  const safeAqi = Number.isFinite(aqi) ? Math.max(0, Math.round(aqi)) : 0;
+  const bands = AQI_BANDS_BY_STANDARD[standard];
+  const matched = bands.find((band) => safeAqi <= band.maxAqi) ?? bands[bands.length - 1];
+  return { ...matched.meta };
+}
+
+export function getAQIScaleLegend(standard: AQIStandard): readonly AQIScaleLegendBand[] {
+  return AQI_SCALE_LEGENDS[standard];
 }
 
 export function getDefaultStandardForCountry(countryCode: string): AQIStandard {
   return countryCode.toUpperCase() === 'IN' ? 'INDIA_CPCB' : 'US_EPA';
+}
+
+export function formatLocationLabel(location: { name: string; country: string }): string {
+  return `${location.name}, ${location.country}`;
 }
 
 export function isValidAQIValue(value: unknown): value is number {

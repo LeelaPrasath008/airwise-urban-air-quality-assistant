@@ -10,7 +10,7 @@ import {
 import { AQIChart } from '../AQIChart.tsx';
 import { OnboardingHero } from '../OnboardingHero.tsx';
 import { PollutantTelemetryCard } from '../PollutantTelemetryCard.tsx';
-import { findBestVentilationWindow } from '../../shared/aqi.ts';
+import { findBestVentilationWindow, getAQIScaleLegend } from '../../shared/aqi.ts';
 import type { AirQualitySnapshot, AQIStandard, NavSection } from '../../shared/types.ts';
 
 interface DashboardViewProps {
@@ -25,24 +25,6 @@ interface DashboardViewProps {
   showOnboarding: boolean;
   onDismissOnboarding: () => void;
 }
-
-const CPCB_SCALE_LEGEND = [
-  { label: 'Good', range: '0–50', color: '#15803D' },
-  { label: 'Satisfactory', range: '51–100', color: '#4D7C0F' },
-  { label: 'Moderate', range: '101–200', color: '#CA8A04' },
-  { label: 'Poor', range: '201–300', color: '#EA580C' },
-  { label: 'Very Poor', range: '301–400', color: '#DC2626' },
-  { label: 'Severe', range: '401–500', color: '#991B1B' },
-];
-
-const US_EPA_SCALE_LEGEND = [
-  { label: 'Good', range: '0–50', color: '#15803D' },
-  { label: 'Moderate', range: '51–100', color: '#CA8A04' },
-  { label: 'Sensitive', range: '101–150', color: '#EA580C' },
-  { label: 'Unhealthy', range: '151–200', color: '#DC2626' },
-  { label: 'Very Unhealthy', range: '201–300', color: '#7E22CE' },
-  { label: 'Hazardous', range: '301–500', color: '#881337' },
-];
 
 export function DashboardView({
   snapshot,
@@ -114,7 +96,7 @@ export function DashboardView({
 
   if (!snapshot || !bestVent) return null;
 
-  const scaleLegend = standard === 'INDIA_CPCB' ? CPCB_SCALE_LEGEND : US_EPA_SCALE_LEGEND;
+  const scaleLegend = getAQIScaleLegend(standard);
 
   return (
     <div className="space-y-6">
@@ -134,6 +116,31 @@ export function DashboardView({
           className="rounded-xl bg-[#FEFCE8] border border-[#FDE047] px-5 py-3.5 text-sm text-[#854D0E]"
         >
           <span className="font-semibold">Demonstration data mode:</span> {snapshot.disclaimer}
+        </div>
+      )}
+
+      {/* Non-blocking Refresh / Location-Switch Error Banner (when prior snapshot remains visible) */}
+      {error && (
+        <div
+          role="alert"
+          className="rounded-xl bg-[#FEF2F2] border border-[#FCA5A5] px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm text-[#7F1D1D]"
+        >
+          <div>
+            <p className="font-semibold text-[#991B1B]">
+              Could not update air quality readings — displaying last loaded data for{' '}
+              {snapshot.location.name}.
+            </p>
+            <p className="text-xs text-[#7F1D1D] mt-0.5">{error}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={loading}
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-[#991B1B] bg-white border border-[#FCA5A5] rounded-lg hover:bg-[#FEE2E2] transition-colors whitespace-nowrap shrink-0 self-start sm:self-center disabled:opacity-60"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+            Retry
+          </button>
         </div>
       )}
 
@@ -295,7 +302,7 @@ export function DashboardView({
             </p>
           </div>
         </div>
-        <AQIChart points={snapshot.hourlyTrend} standard={standard} />
+        <AQIChart key={snapshot.location.id} points={snapshot.hourlyTrend} standard={standard} />
       </section>
 
       {/* Complete Guided User Journey Shortcuts */}
